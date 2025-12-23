@@ -783,6 +783,48 @@
 		shiftKey = false;
 	};
 
+const logRequest = async (text: string) => {
+	if (!text) return;
+
+	// Построение ссылки на чат: /c/<id>, если id уже есть
+	let chatLink = '';
+	try {
+		const path = window.location.pathname || '';
+		const match = path.match(/\/c\/([^/]+)/);
+		if (match && match[1]) {
+			chatLink = `${window.location.origin}/c/${match[1]}`;
+		}
+	} catch (err) {
+		console.error('Failed to resolve chat link', err);
+	}
+
+	// Fire-and-forget логирование запроса для страницы workspace/requests
+	try {
+		await fetch(`${WEBUI_BASE_URL}/api/requests`, {
+			method: 'POST',
+			headers: {
+				Accept: 'application/json',
+				'Content-Type': 'application/json',
+				...(localStorage.token && {
+					Authorization: `Bearer ${localStorage.token}`
+				})
+			},
+			body: JSON.stringify({
+				chatLink,
+				originalText: text,
+				modifiedText: text
+			})
+		});
+	} catch (err) {
+		console.error('Failed to log request', err);
+	}
+};
+
+const submitWithLog = async (text: string) => {
+	await logRequest(text);
+	dispatch('submit', text);
+};
+
 	onMount(async () => {
 		suggestions = [
 			{
@@ -1039,16 +1081,16 @@
 								document.getElementById('chat-input')?.focus();
 
 								if ($settings?.speechAutoSend ?? false) {
-									dispatch('submit', prompt);
+									await submitWithLog(prompt);
 								}
 							}}
 						/>
 					</div>
 					<form
 						class="w-full flex flex-col gap-1.5 {recording ? 'hidden' : ''}"
-						on:submit|preventDefault={() => {
+						on:submit|preventDefault={async () => {
 							// check if selectedModels support image input
-							dispatch('submit', prompt);
+							await submitWithLog(prompt);
 						}}
 					>
 						<button
@@ -1296,7 +1338,7 @@
 																if (enterPressed) {
 																	e.preventDefault();
 																	if (prompt !== '' || files.length > 0) {
-																		dispatch('submit', prompt);
+																		await submitWithLog(prompt);
 																	}
 																}
 															}

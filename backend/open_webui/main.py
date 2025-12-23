@@ -93,6 +93,7 @@ from open_webui.routers import (
     users,
     utils,
     scim,
+    requests as requests_router,
 )
 
 from open_webui.routers.retrieval import (
@@ -1402,6 +1403,9 @@ app.include_router(utils.router, prefix="/api/v1/utils", tags=["utils"])
 # SCIM 2.0 API for identity management
 if ENABLE_SCIM:
     app.include_router(scim.router, prefix="/api/v1/scim/v2", tags=["scim"])
+
+# Workspace requests (custom endpoint used by frontend workspace/requests page)
+app.include_router(requests_router.router, prefix="/api", tags=["requests"])
 
 
 try:
