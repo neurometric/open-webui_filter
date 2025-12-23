@@ -64,7 +64,7 @@
 					class="px-4 py-2 border-b border-gray-100 dark:border-gray-800 text-xs text-gray-500 dark:text-gray-400 flex flex-wrap gap-x-4 gap-y-1"
 				>
 					<span>{request.time}</span>
-					<a href="#" class="underline-offset-2 hover:underline">{request.chatLink}</a>
+					<a href={request.chatLink} class="underline-offset-2 hover:underline">Ссылка</a>
 					<span class="text-gray-400 dark:text-gray-500">мета‑данные…</span>
 				</div>
 
