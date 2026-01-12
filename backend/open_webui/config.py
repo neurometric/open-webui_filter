@@ -1,3 +1,10 @@
+try:
+    import pysqlite3  # noqa: F401
+    import sys
+    sys.modules["sqlite3"] = sys.modules.pop("pysqlite3")
+except Exception:
+    # Если что-то пойдёт не так — просто не патчим, но тогда chroma может упасть
+    pass
 import json
 import logging
 import os

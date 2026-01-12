@@ -587,13 +587,14 @@
 						aria-label={$showSidebar ? $i18n.t('Close Sidebar') : $i18n.t('Open Sidebar')}
 					>
 						<div class=" self-center flex items-center justify-center size-9">
-							<div
-								class="sidebar-new-chat-icon size-8 rounded-full bg-white border border-gray-200 shadow-sm flex items-center justify-center group-hover:hidden"
-							>
-								<span class="text-[19px] leading-none font-semibold">
-									<span class="text-black">f</span><span class="text-blue-500">m</span>
-								</span>
-							</div>
+				<div
+					class="sidebar-new-chat-icon size-8 rounded-full bg-white border border-gray-200 shadow-sm flex items-center justify-center group-hover:hidden"
+				>
+        <span class="text-[19px] leading-none font-semibold">
+         <span class="text-black">f</span><span class="text-blue-500">m</span>
+        </span>
+      </div>
+
 
 							<Sidebar className="size-5 hidden group-hover:flex" />
 						</div>
@@ -784,13 +785,13 @@
 					draggable="false"
 					on:click={newChatHandler}
 				>
-					<div
-						class="sidebar-new-chat-icon size-8 rounded-full bg-white border border-gray-200 shadow-sm flex items-center justify-center"
-					>
-						<span class="text-[19px] leading-none font-semibold">
-							<span class="text-black">f</span><span class="text-blue-500">m</span>
-						</span>
-					</div>
+		<div
+      class="sidebar-new-chat-icon size-8 rounded-full bg-white border border-gray-200 shadow-sm flex items-center justify-center"
+     >
+      <span class="text-[19px] leading-none font-semibold">
+       <span class="text-black">f</span><span class="text-blue-500">m</span>
+      </span>
+     </div>
 				</a>
 
 				<a href="/" class="flex flex-1 px-1.5" on:click={newChatHandler}>

@@ -1400,12 +1400,11 @@ app.include_router(
 )
 app.include_router(utils.router, prefix="/api/v1/utils", tags=["utils"])
 
+app.include_router(requests_router.router, prefix="/api", tags=["requests"])
+
 # SCIM 2.0 API for identity management
 if ENABLE_SCIM:
     app.include_router(scim.router, prefix="/api/v1/scim/v2", tags=["scim"])
-
-# Workspace requests (custom endpoint used by frontend workspace/requests page)
-app.include_router(requests_router.router, prefix="/api", tags=["requests"])
 
 
 try:

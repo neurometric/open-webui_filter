@@ -625,13 +625,14 @@
 		dir={$settings.chatDirection}
 	>
 		<div class={`shrink-0 ltr:mr-3 rtl:ml-3 hidden @lg:flex mt-1 `}>
-			<div
-				class="assistant-message-profile-image size-8 rounded-full bg-white border border-gray-200 shadow-sm flex items-center justify-center"
-			>
-				<span class="text-[17px] leading-none font-semibold">
-					<span class="text-black">f</span><span class="text-blue-500">m</span>
-				</span>
-			</div>
+	<div
+    class="assistant-message-profile-image size-8 rounded-full bg-white border border-gray-200 shadow-sm flex items-center justify-center"
+   >
+    <span class="text-[17px] leading-none font-semibold">
+     <span class="text-black">f</span><span class="text-blue-500">m</span>
+    </span>
+   </div>
+
 		</div>
 
 		<div class="flex-auto w-0 pl-1 relative">
