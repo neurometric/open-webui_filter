@@ -86,11 +86,12 @@
 				});
 				const isDarkMode = document.documentElement.classList.contains('dark');
 
-				const logo = document.createElement('img');
+				const logo = document.createElement('div');
 				logo.id = 'logo';
 				logo.style =
-					'position: absolute; width: auto; height: 6rem; top: 44%; left: 50%; transform: translateX(-50%); display:block;';
-				logo.src = isDarkMode ? '/static/splash-dark.png' : '/static/splash.png';
+					'position: absolute; width: auto; height: 6rem; top: 44%; left: 50%; transform: translateX(-50%); display:flex; align-items:center; justify-content:center; transform: translateX(-50%); font-size: 3rem; font-weight: 600; line-height: 1; color: #000;';
+				logo.innerHTML =
+					'<span style="color: #000;">f</span><span style="color: #3b82f6;">m</span>';
 
 				document.addEventListener('DOMContentLoaded', function () {
 					const splash = document.getElementById('splash-screen');
