@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { getContext, onMount } from 'svelte';
-	import { models, config } from '$lib/stores';
+	import { models, config, WEBUI_NAME } from '$lib/stores';
 
 	import { toast } from 'svelte-sonner';
 	import { deleteSharedChatById, getChatById, shareChatById } from '$lib/apis/chats';
@@ -31,7 +31,7 @@
 		const _chat = chat.chat;
 		console.log('share', _chat);
 
-		toast.success($i18n.t('Redirecting you to INTACT Community'));
+		toast.success($i18n.t('Redirecting you to INTACT Community', { WEBUI_NAME: $WEBUI_NAME}));
 		const url = 'https://openwebui.com';
 		// const url = 'http://localhost:5173';
 

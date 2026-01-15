@@ -835,7 +835,7 @@
 						id="sidebar-webui-name"
 						class=" self-center font-medium text-gray-850 dark:text-white font-primary"
 					>
-						{"INTACT"}
+						{$WEBUI_NAME}
 					</div>
 				</a>
 				<Tooltip

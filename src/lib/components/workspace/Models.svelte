@@ -644,7 +644,7 @@
 	{#if $config?.features.enable_community_sharing}
 		<div class=" my-16">
 			<div class=" text-xl font-medium mb-1 line-clamp-1">
-				{$i18n.t('Made by Open WebUI Community')}
+				{$i18n.t('Made by Open WebUI Community', { WEBUI_NAME: $WEBUI_NAME})}
 			</div>
 
 			<a
