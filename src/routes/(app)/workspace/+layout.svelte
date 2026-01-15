@@ -111,18 +111,6 @@
 							>
 						{/if}
 
-						{#if $user?.role === 'admin' || $user?.permissions?.workspace?.requests}
-							<a
-								class="min-w-fit p-1.5 {$page.url.pathname.includes('/workspace/requests')
-									? ''
-									: 'text-gray-300 dark:text-gray-600 hover:text-gray-700 dark:hover:text-white'} transition"
-								href="/workspace/requests"
-							>
-								Запросы
-							</a>
-						{/if}
-
-						{#if $user?.role === 'admin' || $user?.permissions?.workspace?.tools}
 							<a
 								class="min-w-fit p-1.5 {$page.url.pathname.includes('/workspace/tools')
 									? ''
@@ -131,7 +119,6 @@
 							>
 								{$i18n.t('Tools')}
 							</a>
-						{/if}
 					</div>
 				</div>
 

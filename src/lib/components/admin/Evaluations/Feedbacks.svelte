@@ -24,7 +24,7 @@
 	import ChevronUp from '$lib/components/icons/ChevronUp.svelte';
 	import ChevronDown from '$lib/components/icons/ChevronDown.svelte';
 	import { WEBUI_API_BASE_URL, WEBUI_BASE_URL } from '$lib/constants';
-	import { config } from '$lib/stores';
+	import { config, WEBUI_NAME } from '$lib/stores';
 	import Spinner from '$lib/components/common/Spinner.svelte';
 
 	let page = 1;
@@ -391,7 +391,7 @@
 						}}
 					>
 						<div class=" self-center mr-2 font-medium line-clamp-1">
-							{$i18n.t('Share to Open WebUI Community')}
+							{$i18n.t('Share to Open WebUI Community', { WEBUI_NAME: $WEBUI_NAME})}
 						</div>
 
 						<div class=" self-center">
