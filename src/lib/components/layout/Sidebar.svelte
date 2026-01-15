@@ -705,8 +705,6 @@
 						</Tooltip>
 					</div>
 				{/if}
-
-				{#if $user?.role === 'admin' || $user?.permissions?.workspace?.requests}
 					<div class="">
 						<Tooltip content={"Запросы"} placement="right">
 						<a
@@ -741,7 +739,7 @@
 						</a>
 						</Tooltip>
 					</div>
-    		{/if}
+    		
 
 			</div>
 		</button>
@@ -974,7 +972,6 @@
 						</div>
 					{/if}
 
-					{#if $user?.role === 'admin' || $user?.permissions?.workspace?.requests}
       <div class="px-[0.4375rem] flex justify-center text-gray-800 dark:text-gray-200">
        <a
         id="sidebar-requests-button"
@@ -1006,7 +1003,6 @@
         </div>
        </a>
       </div>
-     {/if}
 
 				</div>
 

@@ -111,7 +111,6 @@
 							>
 						{/if}
 
-						{#if $user?.role === 'admin' || $user?.permissions?.workspace?.tools}
 							<a
 								class="min-w-fit p-1.5 {$page.url.pathname.includes('/workspace/tools')
 									? ''
@@ -120,7 +119,6 @@
 							>
 								{$i18n.t('Tools')}
 							</a>
-						{/if}
 					</div>
 				</div>
 
