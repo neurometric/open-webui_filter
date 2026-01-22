@@ -1,6 +1,8 @@
 import asyncio
 import hashlib
 import json
+import time
+import uuid
 import logging
 from typing import Optional
 
@@ -9,6 +11,8 @@ from aiocache import cached
 import requests
 
 from azure.identity import DefaultAzureCredential, get_bearer_token_provider
+from dataclasses import dataclass
+from typing import Optional
 
 from fastapi import Depends, HTTPException, Request, APIRouter
 from fastapi.responses import (
@@ -32,6 +36,12 @@ from open_webui.env import (
     ENABLE_FORWARD_USER_INFO_HEADERS,
     BYPASS_MODEL_ACCESS_CONTROL,
 )
+from open_webui.utils.llm_audit import (
+    sanitize_payload_last_user_message,
+    insert_audit_rows,
+    LLMResponseMeta,
+    update_response_meta_usage
+)
 from open_webui.models.users import UserModel
 
 from open_webui.constants import ERROR_MESSAGES
@@ -45,6 +55,7 @@ from open_webui.utils.payload import (
 from open_webui.utils.misc import (
     convert_logit_bias_input_to_json,
     stream_chunks_handler,
+    StreamUsageCapture,
 )
 
 from open_webui.utils.auth import get_admin_user, get_verified_user
@@ -54,6 +65,10 @@ from open_webui.utils.headers import include_user_info_headers
 
 log = logging.getLogger(__name__)
 log.setLevel(SRC_LOG_LEVELS["OPENAI"])
+
+@dataclass
+class _UsageCapture:
+    usage: Optional[dict] = None
 
 
 ##########################################
@@ -89,12 +104,41 @@ async def send_get_request(url, key=None, user: UserModel = None):
 async def cleanup_response(
     response: Optional[aiohttp.ClientResponse],
     session: Optional[aiohttp.ClientSession],
+    *,
+    response_meta_id: Optional[str] = None,
+    capture: Optional["StreamUsageCapture"] = None,
 ):
-    if response:
-        response.close()
-    if session:
-        await session.close()
+    log.info(
+        f"AUDIT CLEANUP: response_meta_id={response_meta_id}, "
+        f"has_capture={bool(capture)}, has_usage={bool(capture and capture.usage)}"
+    )
+    # 1) корректно закрываем response/session
+    try:
+        if response:
+            response.close()
+    except Exception:
+        pass
 
+    try:
+        if session:
+            await session.close()
+    except Exception:
+        pass
+
+    # 2) после завершения стрима — обновляем usage/cost
+    try:
+        if response_meta_id and capture and capture.usage:
+            u = capture.usage
+            update_response_meta_usage(
+                response_meta_id=response_meta_id,
+                prompt_tokens=u.get("prompt_tokens"),
+                completion_tokens=u.get("completion_tokens"),
+                total_tokens=u.get("total_tokens"),
+                cost_usd=u.get("cost"),
+                usage_details=u,
+            )
+    except Exception:
+        log.exception("Failed to update response_meta usage after streaming")
 
 def openai_reasoning_model_handler(payload):
     """
@@ -913,13 +957,21 @@ async def generate_chat_completion(
         request_url = f"{request_url}/chat/completions?api-version={api_version}"
     else:
         request_url = f"{url}/chat/completions"
-
+    sanitize_res = await sanitize_payload_last_user_message(payload)
+    payload = sanitize_res.updated_payload
     payload = json.dumps(payload)
 
     r = None
     session = None
     streaming = False
     response = None
+    start_ts = time.perf_counter()
+
+    req_id = (
+        request.headers.get("x-request-id")
+        or request.headers.get("x-correlation-id")
+        or str(uuid.uuid4())
+    )
 
     try:
         session = aiohttp.ClientSession(
@@ -934,16 +986,64 @@ async def generate_chat_completion(
             cookies=cookies,
             ssl=AIOHTTP_CLIENT_SESSION_SSL,
         )
-
+        audit_inserted = False
         # Check if response is SSE
         if "text/event-stream" in r.headers.get("Content-Type", ""):
             streaming = True
+            capture = StreamUsageCapture()
+            latency_ms = int((time.perf_counter() - start_ts) * 1000)
+
+            # ВАЖНО: создаём запись response_meta ДО return, чтобы был response_meta_id
+            response_meta_id = None
+            try:
+                if sanitize_res and sanitize_res.is_user_input:
+                    response_meta_id = insert_audit_rows(
+                        response_meta=LLMResponseMeta(
+                            user_id=user.id if user else None,
+                            session_id=None,
+                            conversation_id=None,
+                            message_id=None,
+                            provider="openai",
+                            model=model_id,
+                            request_id=req_id,
+                            upstream_id=None,
+                            prompt_tokens=None,
+                            completion_tokens=None,
+                            total_tokens=None,
+                            latency_ms=latency_ms,
+                            cost_usd=None,
+                            meta_json={
+                                "headers": dict(r.headers),
+                                "extra": {
+                                    "stream": True,
+                                    "azure": bool(api_config.get("azure", False)),
+                                    "request_url": request_url,
+                                 },
+                                  "user_name": user.name if user else None,
+                                  "user_email": user.email if user else None,
+                                  "user_role": user.role if user else None,
+                            },
+                        ),
+                        raw_text=sanitize_res.raw_text,
+                        masked_text=sanitize_res.masked_text,
+                        has_pii=int(sanitize_res.has_pii),
+                        policy_id=sanitize_res.policy_id,
+                        detector_version=sanitize_res.detector_version,
+                    )
+                audit_inserted = True
+            except Exception:
+                log.exception("Failed to insert response_meta before streaming")
+
             return StreamingResponse(
-                stream_chunks_handler(r.content),
+                stream_chunks_handler(r.content, capture),
                 status_code=r.status,
                 headers=dict(r.headers),
                 background=BackgroundTask(
-                    cleanup_response, response=r, session=session
+                    cleanup_response,
+                    response=r,
+                    session=session,
+                    response_meta_id=response_meta_id,
+                    capture=capture,
                 ),
             )
         else:
@@ -968,6 +1068,51 @@ async def generate_chat_completion(
             detail="Open WebUI: Server Connection Error",
         )
     finally:
+        try:
+            latency_ms = int((time.perf_counter() - start_ts) * 1000)
+
+            upstream_headers = dict(r.headers) if r else {}
+            upstream_id = (
+                upstream_headers.get("x-request-id")
+                or upstream_headers.get("request-id")
+            )
+
+            meta_obj = {
+                "extra": {
+                    "stream": streaming,
+                    "request_url": request_url,
+                },
+                "headers": upstream_headers,
+                "user_name": user.name if user else None,
+                "user_email": user.email if user else None,
+                "user_role": user.role if user else None,
+            }
+            if (not audit_inserted) and  sanitize_res and sanitize_res.is_user_input:
+                insert_audit_rows(
+                    response_meta=LLMResponseMeta(
+                        user_id=user.id if user else None,
+                        session_id=None,
+                        conversation_id=None,
+                        message_id=None,
+                        provider="openai",
+                        model=model_id,
+                        request_id=req_id,
+                        upstream_id=upstream_id,
+                        prompt_tokens=None,
+                        completion_tokens=None,
+                        total_tokens=None,
+                        latency_ms=latency_ms,
+                        cost_usd=None,
+                        meta_json=meta_obj,
+                    ),
+                    raw_text=sanitize_res.raw_text if sanitize_res else None,
+                    masked_text=sanitize_res.masked_text if sanitize_res else None,
+                    has_pii=int(sanitize_res.has_pii) if sanitize_res else 0,
+                    policy_id=sanitize_res.policy_id if sanitize_res else None,
+                    detector_version=sanitize_res.detector_version if sanitize_res else None,
+                )
+        except Exception:
+            log.exception("Failed to save audit rows")
         if not streaming:
             await cleanup_response(r, session)
 
@@ -1025,7 +1170,8 @@ async def embeddings(request: Request, form_data: dict, user):
                 status_code=r.status,
                 headers=dict(r.headers),
                 background=BackgroundTask(
-                    cleanup_response, response=r, session=session
+                    cleanup_response, response=r, session=session,response_meta_id=response_meta_id,
+    capture=capture
                 ),
             )
         else:
