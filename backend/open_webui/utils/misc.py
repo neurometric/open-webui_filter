@@ -9,7 +9,8 @@ from pathlib import Path
 from typing import Callable, Optional, Sequence, Union
 import json
 import aiohttp
-
+from dataclasses import dataclass
+from typing import Optional, Any
 
 import collections.abc
 from open_webui.env import SRC_LOG_LEVELS, CHAT_STREAM_RESPONSE_CHUNK_MAX_BUFFER_SIZE
@@ -584,20 +585,46 @@ def extract_urls(text: str) -> list[str]:
     )  # Matches http and https URLs
     return url_pattern.findall(text)
 
+@dataclass
+class StreamUsageCapture:
+    usage: Optional[dict] = None
 
-def stream_chunks_handler(stream: aiohttp.StreamReader):
+def stream_chunks_handler(stream: aiohttp.StreamReader, capture: Optional["StreamUsageCapture"] = None):
     """
-    Handle stream response chunks, supporting large data chunks that exceed the original 16kb limit.
-    When a single line exceeds max_buffer_size, returns an empty JSON string {} and skips subsequent data
-    until encountering normally sized data.
-
-    :param stream: The stream reader to handle.
-    :return: An async generator that yields the stream data.
+    Handle stream response chunks with max line size protection.
+    Additionally capture final SSE JSON containing 'usage' (e.g. OpenRouter).
     """
 
     max_buffer_size = CHAT_STREAM_RESPONSE_CHUNK_MAX_BUFFER_SIZE
     if max_buffer_size is None or max_buffer_size <= 0:
-        return stream
+        max_buffer_size = 10**9
+    def _maybe_capture_usage_from_bytes(b: bytes) -> None:
+        print("AUDIT STREAM: View_may")
+        if capture is None or not b:
+            return
+
+        # We expect lines like: b"data: {...}"
+        if not b.startswith(b"data:"):
+            return
+
+        payload = b[5:].strip()
+        if not payload or payload == b"[DONE]":
+            return
+
+        # Debug: if line mentions "usage" but json parsing fails, we still want visibility
+        if b'"usage"' in payload and capture.usage is None:
+            try:
+                print("AUDIT STREAM: saw 'usage' substring, preview=%s", payload[:200])
+            except Exception:
+                pass
+
+        try:
+            obj = json.loads(payload.decode("utf-8", errors="ignore"))
+            if isinstance(obj, dict) and isinstance(obj.get("usage"), dict):
+                capture.usage = obj["usage"]
+                print("AUDIT STREAM: captured usage = %s", capture.usage)
+        except Exception:
+            return
 
     async def yield_safe_stream_chunks():
         buffer = b""
@@ -607,43 +634,49 @@ def stream_chunks_handler(stream: aiohttp.StreamReader):
             if not data:
                 continue
 
-            # In skip_mode, if buffer already exceeds the limit, clear it (it's part of an oversized line)
+            # If we are already skipping and buffer is growing too much, drop buffer
             if skip_mode and len(buffer) > max_buffer_size:
                 buffer = b""
 
-            lines = (buffer + data).split(b"\n")
+            blob = buffer + data
 
-            # Process complete lines (except the last possibly incomplete fragment)
-            for i in range(len(lines) - 1):
-                line = lines[i]
+            # IMPORTANT: OpenRouter can use \r\n, but split("\n") is fine (we keep \r)
+            lines = blob.split(b"\n")
+            buffer = lines[-1]
+
+            for line in lines[:-1]:
+                # ALWAYS try capture before any size/skip handling
+                _maybe_capture_usage_from_bytes(line)
 
                 if skip_mode:
-                    # Skip mode: check if current line is small enough to exit skip mode
                     if len(line) <= max_buffer_size:
                         skip_mode = False
                         yield line
                     else:
+                        # We still discard big lines, but capture attempt already happened above
                         yield b"data: {}"
                 else:
-                    # Normal mode: check if line exceeds limit
                     if len(line) > max_buffer_size:
                         skip_mode = True
                         yield b"data: {}"
-                        log.info(f"Skip mode triggered, line size: {len(line)}")
+                        log.info("Skip mode triggered, line size: %s", len(line))
                     else:
                         yield line
 
-            # Save the last incomplete fragment
-            buffer = lines[-1]
-
-            # Check if buffer exceeds limit
+            # If buffer itself already too big and not in skip_mode, enter skip_mode
             if not skip_mode and len(buffer) > max_buffer_size:
+                # Try to capture from the oversized buffer start (in case it contains usage)
+                _maybe_capture_usage_from_bytes(buffer[: min(len(buffer), 4096)])
+
                 skip_mode = True
-                log.info(f"Skip mode triggered, buffer size: {len(buffer)}")
-                # Clear oversized buffer to prevent unlimited growth
+                log.info("Skip mode triggered, buffer size: %s", len(buffer))
                 buffer = b""
 
-        # Process remaining buffer data
+        # End of stream: even if skip_mode=True, try to capture from remaining buffer
+        if buffer:
+            _maybe_capture_usage_from_bytes(buffer)
+
+        # Preserve old behavior: only yield remainder if not skip_mode
         if buffer and not skip_mode:
             yield buffer
 
