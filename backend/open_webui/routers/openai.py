@@ -852,6 +852,10 @@ async def generate_chat_completion(
     payload = {**form_data}
     metadata = payload.pop("metadata", None)
 
+    conversation_id = None
+    if isinstance(metadata, dict):
+        conversation_id = metadata.get("chat_id") or metadata.get("conversation_id")
+
     model_id = form_data.get("model")
     model_info = Models.get_model_by_id(model_id)
 
@@ -1001,7 +1005,7 @@ async def generate_chat_completion(
                         response_meta=LLMResponseMeta(
                             user_id=user.id if user else None,
                             session_id=None,
-                            conversation_id=None,
+                            conversation_id=conversation_id,
                             message_id=None,
                             provider="openai",
                             model=model_id,
@@ -1092,7 +1096,7 @@ async def generate_chat_completion(
                     response_meta=LLMResponseMeta(
                         user_id=user.id if user else None,
                         session_id=None,
-                        conversation_id=None,
+                        conversation_id=conversation_id,
                         message_id=None,
                         provider="openai",
                         model=model_id,
