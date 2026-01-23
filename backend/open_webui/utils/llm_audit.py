@@ -262,19 +262,15 @@ def insert_audit_rows(
     policy_id: Optional[str],
     detector_version: Optional[str],
 ) -> str:
+    print("AUDIT: insert_audit_rows called, db_path =", _webui_db_path())
     response_meta_id = str(uuid.uuid4())
     request_text_id = str(uuid.uuid4())
-
-    # строим путь на чат (фронт: /c/<id>)
-    chat_path = None
-    if response_meta.conversation_id:
-        chat_path = f"/c/{response_meta.conversation_id}"
 
     conn = _db_connect()
     try:
         cur = conn.cursor()
 
-        # 1) meta всегда
+        # 1) всегда пишем response_meta
         cur.execute(
             """
             INSERT INTO response_meta (
@@ -312,8 +308,13 @@ def insert_audit_rows(
             ),
         )
 
-        # 2) request_texts — только если это реальный ввод пользователя
+        # 2) request_texts — только для реального user input
+        print("AUDIT: raw_text is None?", raw_text is None)
         if raw_text is not None:
+            print(
+                "AUDIT: inserting request_texts, preview=",
+                raw_text[:80] if isinstance(raw_text, str) else raw_text
+            )
             cur.execute(
                 """
                 INSERT INTO request_texts (
@@ -321,7 +322,6 @@ def insert_audit_rows(
                   response_meta_id,
                   user_id, user_name, user_email, user_role,
                   session_id, conversation_id, message_id,
-                  chat_path,
                   raw_text, masked_text,
                   has_pii,
                   policy_id, detector_version
@@ -330,7 +330,6 @@ def insert_audit_rows(
                   ?,
                   ?, ?, ?, ?,
                   ?, ?, ?,
-                  ?,
                   ?, ?,
                   ?,
                   ?, ?
@@ -339,18 +338,13 @@ def insert_audit_rows(
                 (
                     request_text_id,
                     response_meta_id,
-
                     response_meta.user_id,
                     (response_meta.meta_json or {}).get("user_name"),
                     (response_meta.meta_json or {}).get("user_email"),
                     (response_meta.meta_json or {}).get("user_role"),
-
                     response_meta.session_id,
                     response_meta.conversation_id,
                     response_meta.message_id,
-
-                    chat_path,
-
                     raw_text,
                     masked_text,
                     int(has_pii) if has_pii else 0,
@@ -359,6 +353,7 @@ def insert_audit_rows(
                 ),
             )
 
+        print("AUDIT: committing...")
         conn.commit()
         return response_meta_id
     finally:
