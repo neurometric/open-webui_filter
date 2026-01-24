@@ -80,19 +80,33 @@
 							href="/admin/evaluations">{$i18n.t('Evaluations')}</a
 						>
 
-						<a
-							class="min-w-fit p-1.5 {$page.url.pathname.includes('/admin/functions')
-								? ''
-								: 'text-gray-300 dark:text-gray-600 hover:text-gray-700 dark:hover:text-white'} transition"
-							href="/admin/functions">{$i18n.t('Functions')}</a
-						>
+					<a
+						class="min-w-fit p-1.5 {$page.url.pathname.includes('/admin/functions')
+							? ''
+							: 'text-gray-300 dark:text-gray-600 hover:text-gray-700 dark:hover:text-white'} transition"
+						href="/admin/functions">{$i18n.t('Functions')}</a
+					>
 
-						<a
-							class="min-w-fit p-1.5 {$page.url.pathname.includes('/admin/settings')
-								? ''
-								: 'text-gray-300 dark:text-gray-600 hover:text-gray-700 dark:hover:text-white'} transition"
-							href="/admin/settings">{$i18n.t('Settings')}</a
-						>
+				<a
+					class="min-w-fit p-1.5 {$page.url.pathname.includes('/admin/requests')
+						? ''
+						: 'text-gray-300 dark:text-gray-600 hover:text-gray-700 dark:hover:text-white'} transition"
+					href="/admin/requests">Запросы</a
+				>
+
+				<a
+					class="min-w-fit p-1.5 {$page.url.pathname.includes('/admin/billing')
+						? ''
+						: 'text-gray-300 dark:text-gray-600 hover:text-gray-700 dark:hover:text-white'} transition"
+					href="/admin/billing">Биллинг</a
+				>
+
+				<a
+					class="min-w-fit p-1.5 {$page.url.pathname.includes('/admin/settings')
+						? ''
+						: 'text-gray-300 dark:text-gray-600 hover:text-gray-700 dark:hover:text-white'} transition"
+					href="/admin/settings">{$i18n.t('Settings')}</a
+				>
 					</div>
 				</div>
 			</div>
