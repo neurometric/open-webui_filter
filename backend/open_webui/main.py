@@ -94,6 +94,7 @@ from open_webui.routers import (
     utils,
     scim,
     requests as requests_router,
+    billing,
 )
 
 from open_webui.routers.retrieval import (
@@ -1401,6 +1402,7 @@ app.include_router(
 app.include_router(utils.router, prefix="/api/v1/utils", tags=["utils"])
 
 app.include_router(requests_router.router, prefix="/api", tags=["requests"])
+app.include_router(billing.router, prefix="/api", tags=["billing"])
 
 # SCIM 2.0 API for identity management
 if ENABLE_SCIM:
