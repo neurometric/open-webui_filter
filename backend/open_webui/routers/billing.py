@@ -1,5 +1,8 @@
 import logging
 import json
+import csv
+import io
+from fastapi.responses import StreamingResponse
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, Query
@@ -296,3 +299,129 @@ async def get_billing_options(
     except Exception as e:
         log.exception("Failed to load billing options: %s", e)
         return BillingOptions(models=[], userNames=[])
+
+@router.get(
+    "/billing/export",
+    summary="Export billing records from response_meta to CSV (filters applied, no pagination)",
+)
+async def export_billing_csv(
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    order_by: Optional[str] = None,
+    order_dir: Optional[str] = None,
+    models: Optional[List[str]] = Query(default=None),        # models=a&models=b
+    user_names: Optional[List[str]] = Query(default=None),    # user_names=u1&user_names=u2
+    user=Depends(get_verified_user),
+):
+    """
+    Экспорт CSV со всеми строками, подходящими под фильтры (без пагинации).
+    Фильтры совпадают с /billing:
+    - date_from/date_to
+    - order_by/order_dir
+    - models (multi)
+    - user_names (multi, meta_json.user_name)
+    """
+    try:
+        where_sql, where_params = _build_where(date_from, date_to, models, user_names)
+        params = {**where_params}
+
+        valid_order_fields = {
+            "prompt_tokens": "prompt_tokens",
+            "completion_tokens": "completion_tokens",
+            "cost_usd": "cost_usd",
+            "latency_ms": "latency_ms",
+        }
+
+        order_sql = "ORDER BY datetime(created_at) DESC"
+        if order_by and order_by in valid_order_fields:
+            direction = "ASC" if order_dir == "asc" else "DESC"
+            order_sql = f"ORDER BY {valid_order_fields[order_by]} {direction}"
+
+        query = f"""
+            SELECT
+              created_at,
+              user_id,
+              provider,
+              model,
+              prompt_tokens,
+              completion_tokens,
+              total_tokens,
+              cost_usd,
+              latency_ms,
+              meta_json
+            FROM response_meta
+            {where_sql}
+            {order_sql}
+        """
+
+        stmt = text(query)
+        if "models" in params:
+            stmt = stmt.bindparams(bindparam("models", expanding=True))
+        if "user_names" in params:
+            stmt = stmt.bindparams(bindparam("user_names", expanding=True))
+
+        rows = Session.execute(stmt, params).mappings().all()
+
+        # Стримим CSV (чтобы не держать одну огромную строку)
+        def iter_csv():
+            buf = io.StringIO()
+            w = csv.writer(buf)
+
+            # BOM, чтобы Excel нормально понял UTF-8
+            yield "\ufeff".encode("utf-8")
+
+            w.writerow([
+                "createdAt",
+                "userId",
+                "userName",
+                "userEmail",
+                "provider",
+                "model",
+                "promptTokens",
+                "completionTokens",
+                "totalTokens",
+                "costUsd",
+                "latencyMs",
+            ])
+            yield buf.getvalue().encode("utf-8")
+            buf.seek(0); buf.truncate(0)
+
+            for r in rows:
+                meta_json_str = r.get("meta_json")
+                user_name_val = None
+                user_email_val = None
+                if meta_json_str:
+                    try:
+                        meta = json.loads(meta_json_str)
+                        user_name_val = meta.get("user_name")
+                        user_email_val = meta.get("user_email")
+                    except Exception:
+                        pass
+
+                w.writerow([
+                    str(r.get("created_at") or ""),
+                    r.get("user_id"),
+                    user_name_val or "",
+                    user_email_val or "",
+                    r.get("provider") or "",
+                    r.get("model") or "",
+                    r.get("prompt_tokens") if r.get("prompt_tokens") is not None else "",
+                    r.get("completion_tokens") if r.get("completion_tokens") is not None else "",
+                    r.get("total_tokens") if r.get("total_tokens") is not None else "",
+                    r.get("cost_usd") if r.get("cost_usd") is not None else "",
+                    r.get("latency_ms") if r.get("latency_ms") is not None else "",
+                ])
+
+                yield buf.getvalue().encode("utf-8")
+                buf.seek(0); buf.truncate(0)
+
+        headers = {
+            "Content-Disposition": 'attachment; filename="billing.csv"'
+        }
+        return StreamingResponse(iter_csv(), media_type="text/csv; charset=utf-8", headers=headers)
+
+    except Exception as e:
+        log.exception("Failed to export billing csv: %s", e)
+        # вернём пустой CSV
+        headers = {"Content-Disposition": 'attachment; filename="billing.csv"'}
+        return StreamingResponse(iter([b"\ufeffcreatedAt\n"]), media_type="text/csv; charset=utf-8", headers=headers)

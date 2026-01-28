@@ -193,6 +193,44 @@
     const tokensPerSec = 1000 / latencyMs;
     return `${tokensPerSec.toFixed(2)} т/с`;
   }
+const exportCsv = async () => {
+    try {
+      const params = new URLSearchParams();
+
+      if (dateFrom.trim()) params.set('date_from', dateFrom.trim());
+      if (dateTo.trim()) params.set('date_to', dateTo.trim());
+      if (orderBy) params.set('order_by', orderBy);
+      if (orderDir) params.set('order_dir', orderDir);
+
+      for (const m of selectedModels) params.append('models', m);
+      for (const u of selectedUserNames) params.append('user_names', u);
+
+      const res = await fetch(`${WEBUI_BASE_URL}/api/billing/export?${params.toString()}`, {
+        method: 'GET',
+        headers: {
+          ...(localStorage.token && { Authorization: `Bearer ${localStorage.token}` })
+        }
+      });
+
+      if (!res.ok) throw new Error('Не удалось скачать CSV');
+
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `billing_${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error(e);
+      // можно красиво показать error, но минимум:
+      error = e instanceof Error ? e.message : 'Ошибка экспорта CSV';
+    }
+  };
 </script>
 
 <div class="px-4.5 w-full mx-auto max-w-7xl py-4 space-y-3">
@@ -441,6 +479,14 @@
         >
           Вперёд
         </button>
+<button
+        class="px-3 py-1 text-xs font-medium rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-default"
+        on:click={exportCsv}
+        disabled={loading || optionsLoading}
+        title="Скачать CSV с применёнными фильтрами"
+      >
+        Скачать CSV
+      </button>
       </div>
     </div>
 
