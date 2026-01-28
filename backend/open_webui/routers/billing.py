@@ -1,8 +1,11 @@
 import logging
+import json
 from typing import List, Optional
-from fastapi import APIRouter, Depends
+
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
-from sqlalchemy import text
+from sqlalchemy import text, bindparam
+
 from open_webui.env import SRC_LOG_LEVELS
 from open_webui.utils.auth import get_verified_user
 from open_webui.internal.db import Session
@@ -28,6 +31,83 @@ class BillingItem(BaseModel):
     latencyMs: Optional[int] = None
 
 
+class BillingOptions(BaseModel):
+    models: List[str]
+    userNames: List[str]
+
+
+def _safe_list(values: Optional[List[str]]) -> List[str]:
+    if not values:
+        return []
+    return [v.strip() for v in values if v and v.strip()]
+
+
+def _build_where(
+    date_from: Optional[str],
+    date_to: Optional[str],
+    models: Optional[List[str]],
+    user_names: Optional[List[str]],
+):
+    where_clauses = []
+    params = {}
+
+    if date_from:
+        where_clauses.append("datetime(created_at) >= datetime(:date_from)")
+        params["date_from"] = date_from
+
+    if date_to:
+        where_clauses.append("datetime(created_at) <= datetime(:date_to)")
+        params["date_to"] = date_to
+
+    safe_models = _safe_list(models)
+    if safe_models:
+        where_clauses.append("model IN :models")
+        params["models"] = safe_models
+
+    safe_user_names = _safe_list(user_names)
+    if safe_user_names:
+        where_clauses.append("json_extract(meta_json, '$.user_name') IN :user_names")
+        params["user_names"] = safe_user_names
+
+    where_sql = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
+    return where_sql, params
+
+
+def _build_where_for_options(
+    date_from: Optional[str],
+    date_to: Optional[str],
+    models: Optional[List[str]],
+    user_names: Optional[List[str]],
+    include_models: bool,
+    include_user_names: bool,
+):
+    where_clauses = []
+    params = {}
+
+    if date_from:
+        where_clauses.append("datetime(created_at) >= datetime(:date_from)")
+        params["date_from"] = date_from
+
+    if date_to:
+        where_clauses.append("datetime(created_at) <= datetime(:date_to)")
+        params["date_to"] = date_to
+
+    if include_models:
+        safe_models = _safe_list(models)
+        if safe_models:
+            where_clauses.append("model IN :models")
+            params["models"] = safe_models
+
+    if include_user_names:
+        safe_user_names = _safe_list(user_names)
+        if safe_user_names:
+            where_clauses.append("json_extract(meta_json, '$.user_name') IN :user_names")
+            params["user_names"] = safe_user_names
+
+    where_sql = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
+    return where_sql, params
+
+
 @router.get(
     "/billing",
     response_model=List[BillingItem],
@@ -39,51 +119,41 @@ async def get_billing(
     date_to: Optional[str] = None,
     order_by: Optional[str] = None,
     order_dir: Optional[str] = None,
+    models: Optional[List[str]] = Query(default=None),        # models=a&models=b
+    user_names: Optional[List[str]] = Query(default=None),    # user_names=u1&user_names=u2
     user=Depends(get_verified_user),
 ) -> List[BillingItem]:
     """
     Returns paginated billing records from response_meta table.
-    
-    - `page` starts from 1
+
+    - page starts from 1
     - 10 records per page
-    - `date_from` and `date_to` for date range filter (format: YYYY-MM-DD or YYYY-MM-DD HH:MM:SS)
-    - `order_by`: prompt_tokens, completion_tokens, cost_usd, latency_ms
-    - `order_dir`: asc or desc
+    - date_from/date_to filters
+    - order_by: prompt_tokens, completion_tokens, cost_usd, latency_ms
+    - order_dir: asc or desc
+    - models: multi model filter
+    - user_names: multi user_name filter (from meta_json)
     """
     try:
         page = max(page, 1)
         page_size = 10
         offset = (page - 1) * page_size
 
-        # Build WHERE clause for date filtering
-        where_clauses = []
-        params = {"limit": page_size, "offset": offset}
-        
-        if date_from:
-            where_clauses.append("datetime(created_at) >= datetime(:date_from)")
-            params["date_from"] = date_from
-        
-        if date_to:
-            where_clauses.append("datetime(created_at) <= datetime(:date_to)")
-            params["date_to"] = date_to
-        
-        where_sql = ""
-        if where_clauses:
-            where_sql = "WHERE " + " AND ".join(where_clauses)
-        
-        # Build ORDER BY clause
+        where_sql, where_params = _build_where(date_from, date_to, models, user_names)
+        params = {"limit": page_size, "offset": offset, **where_params}
+
         valid_order_fields = {
             "prompt_tokens": "prompt_tokens",
             "completion_tokens": "completion_tokens",
             "cost_usd": "cost_usd",
             "latency_ms": "latency_ms",
         }
-        
+
         order_sql = "ORDER BY datetime(created_at) DESC"
         if order_by and order_by in valid_order_fields:
             direction = "ASC" if order_dir == "asc" else "DESC"
             order_sql = f"ORDER BY {valid_order_fields[order_by]} {direction}"
-        
+
         query = f"""
             SELECT
               created_at,
@@ -102,22 +172,26 @@ async def get_billing(
             LIMIT :limit OFFSET :offset
         """
 
-        rows = Session.execute(text(query), params).mappings().all()
+        stmt = text(query)
+        if "models" in params:
+            stmt = stmt.bindparams(bindparam("models", expanding=True))
+        if "user_names" in params:
+            stmt = stmt.bindparams(bindparam("user_names", expanding=True))
+
+        rows = Session.execute(stmt, params).mappings().all()
 
         items: List[BillingItem] = []
         for r in rows:
             created_at = r.get("created_at")
             meta_json_str = r.get("meta_json")
-            
-            # Parse meta_json to extract user_name and user_email
-            user_name = None
-            user_email = None
+
+            user_name_val = None
+            user_email_val = None
             if meta_json_str:
                 try:
-                    import json
                     meta = json.loads(meta_json_str)
-                    user_name = meta.get("user_name")
-                    user_email = meta.get("user_email")
+                    user_name_val = meta.get("user_name")
+                    user_email_val = meta.get("user_email")
                 except Exception:
                     pass
 
@@ -125,8 +199,8 @@ async def get_billing(
                 BillingItem(
                     createdAt=str(created_at) if created_at else "",
                     userId=r.get("user_id"),
-                    userName=user_name,
-                    userEmail=user_email,
+                    userName=user_name_val,
+                    userEmail=user_email_val,
                     provider=r.get("provider"),
                     model=r.get("model"),
                     promptTokens=r.get("prompt_tokens"),
@@ -142,3 +216,83 @@ async def get_billing(
         log.exception("Failed to load billing data from DB: %s", e)
         return []
 
+
+@router.get(
+    "/billing/options",
+    response_model=BillingOptions,
+    summary="Get distinct models and userNames for billing filters (no pagination)",
+)
+async def get_billing_options(
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    models: Optional[List[str]] = Query(default=None),
+    user_names: Optional[List[str]] = Query(default=None),
+    user=Depends(get_verified_user),
+) -> BillingOptions:
+    """
+    Возвращает уникальные models и userNames без пагинации.
+
+    Facet логика:
+    - models: зависит от date_* + user_names, но НЕ зависит от models
+    - userNames: зависит от date_* + models, но НЕ зависит от user_names
+    """
+    try:
+        # models list: include user_names, exclude models
+        where_models_sql, params_models = _build_where_for_options(
+            date_from=date_from,
+            date_to=date_to,
+            models=models,
+            user_names=user_names,
+            include_models=False,
+            include_user_names=True,
+        )
+
+        # userNames list: include models, exclude user_names
+        where_users_sql, params_users = _build_where_for_options(
+            date_from=date_from,
+            date_to=date_to,
+            models=models,
+            user_names=user_names,
+            include_models=True,
+            include_user_names=False,
+        )
+
+        q_models = f"""
+            SELECT DISTINCT model AS value
+            FROM response_meta
+            {where_models_sql}
+            {"AND" if where_models_sql else "WHERE"} model IS NOT NULL AND trim(model) != ''
+            ORDER BY value ASC
+        """
+
+        q_users = f"""
+            SELECT DISTINCT json_extract(meta_json, '$.user_name') AS value
+            FROM response_meta
+            {where_users_sql}
+            {"AND" if where_users_sql else "WHERE"} json_extract(meta_json, '$.user_name') IS NOT NULL
+              AND trim(json_extract(meta_json, '$.user_name')) != ''
+            ORDER BY value ASC
+        """
+
+        stmt_models = text(q_models)
+        if "models" in params_models:
+            stmt_models = stmt_models.bindparams(bindparam("models", expanding=True))
+        if "user_names" in params_models:
+            stmt_models = stmt_models.bindparams(bindparam("user_names", expanding=True))
+
+        stmt_users = text(q_users)
+        if "models" in params_users:
+            stmt_users = stmt_users.bindparams(bindparam("models", expanding=True))
+        if "user_names" in params_users:
+            stmt_users = stmt_users.bindparams(bindparam("user_names", expanding=True))
+
+        models_rows = Session.execute(stmt_models, params_models).mappings().all()
+        users_rows = Session.execute(stmt_users, params_users).mappings().all()
+
+        models_list = sorted({(r.get("value") or "").strip() for r in models_rows if (r.get("value") or "").strip()})
+        users_list = sorted({(r.get("value") or "").strip() for r in users_rows if (r.get("value") or "").strip()})
+
+        return BillingOptions(models=models_list, userNames=users_list)
+    except Exception as e:
+        log.exception("Failed to load billing options: %s", e)
+        return BillingOptions(models=[], userNames=[])
