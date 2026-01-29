@@ -132,7 +132,7 @@ async def get_billing(
     - page starts from 1
     - 10 records per page
     - date_from/date_to filters
-    - order_by: prompt_tokens, completion_tokens, cost_usd, latency_ms
+    - order_by: prompt_tokens, completion_tokens, total_tokens, cost_usd, latency_ms
     - order_dir: asc or desc
     - models: multi model filter
     - user_names: multi user_name filter (from meta_json)
@@ -148,6 +148,7 @@ async def get_billing(
         valid_order_fields = {
             "prompt_tokens": "prompt_tokens",
             "completion_tokens": "completion_tokens",
+            "total_tokens": "total_tokens",
             "cost_usd": "cost_usd",
             "latency_ms": "latency_ms",
         }
@@ -300,6 +301,7 @@ async def get_billing_options(
         log.exception("Failed to load billing options: %s", e)
         return BillingOptions(models=[], userNames=[])
 
+
 @router.get(
     "/billing/export",
     summary="Export billing records from response_meta to CSV (filters applied, no pagination)",
@@ -328,6 +330,7 @@ async def export_billing_csv(
         valid_order_fields = {
             "prompt_tokens": "prompt_tokens",
             "completion_tokens": "completion_tokens",
+            "total_tokens": "total_tokens",
             "cost_usd": "cost_usd",
             "latency_ms": "latency_ms",
         }
@@ -362,12 +365,11 @@ async def export_billing_csv(
 
         rows = Session.execute(stmt, params).mappings().all()
 
-        # Стримим CSV (чтобы не держать одну огромную строку)
         def iter_csv():
             buf = io.StringIO()
             w = csv.writer(buf)
 
-            # BOM, чтобы Excel нормально понял UTF-8
+            # BOM для Excel
             yield "\ufeff".encode("utf-8")
 
             w.writerow([
@@ -415,13 +417,10 @@ async def export_billing_csv(
                 yield buf.getvalue().encode("utf-8")
                 buf.seek(0); buf.truncate(0)
 
-        headers = {
-            "Content-Disposition": 'attachment; filename="billing.csv"'
-        }
+        headers = {"Content-Disposition": 'attachment; filename="billing.csv"'}
         return StreamingResponse(iter_csv(), media_type="text/csv; charset=utf-8", headers=headers)
 
     except Exception as e:
         log.exception("Failed to export billing csv: %s", e)
-        # вернём пустой CSV
         headers = {"Content-Disposition": 'attachment; filename="billing.csv"'}
         return StreamingResponse(iter([b"\ufeffcreatedAt\n"]), media_type="text/csv; charset=utf-8", headers=headers)

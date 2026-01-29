@@ -21,6 +21,9 @@
     userNames: string[];
   };
 
+  type SortKey = '' | 'promptTokens' | 'completionTokens' | 'totalTokens' | 'costUsd' | 'speed';
+  type SortDir = '' | 'asc' | 'desc';
+
   let items: BillingItem[] = [];
   let loading = true;
   let error: string | null = null;
@@ -31,8 +34,6 @@
   // Filters
   let dateFrom = '';
   let dateTo = '';
-  let orderBy = '';
-  let orderDir = 'desc';
 
   // New filters
   let selectedModels: string[] = [];
@@ -51,8 +52,58 @@
   let modelBoxEl: HTMLDivElement | null = null;
   let userBoxEl: HTMLDivElement | null = null;
 
+  // Table sort (single active)
+  let sortKey: SortKey = '';
+  let sortDir: SortDir = '';
+
   function containsCI(haystack: string, needle: string) {
     return haystack.toLowerCase().includes(needle.toLowerCase());
+  }
+
+  function cycleSort(key: Exclude<SortKey, ''>) {
+    if (sortKey !== key) {
+      sortKey = key;
+      sortDir = 'asc';
+      return;
+    }
+    if (sortDir === 'asc') {
+      sortDir = 'desc';
+      return;
+    }
+    if (sortDir === 'desc') {
+      sortKey = '';
+      sortDir = '';
+      return;
+    }
+    sortDir = 'asc';
+  }
+
+  function buildSortParams(): { order_by?: string; order_dir?: 'asc' | 'desc' } {
+    if (!sortKey || !sortDir) return {};
+
+    if (sortKey === 'promptTokens') return { order_by: 'prompt_tokens', order_dir: sortDir };
+    if (sortKey === 'completionTokens') return { order_by: 'completion_tokens', order_dir: sortDir };
+    if (sortKey === 'totalTokens') return { order_by: 'total_tokens', order_dir: sortDir };
+    if (sortKey === 'costUsd') return { order_by: 'cost_usd', order_dir: sortDir };
+
+    // speed = 1000/latency. Больше speed => меньше latency.
+    // UI asc (мал->бол) => latency desc, UI desc (бол->мал) => latency asc
+    if (sortKey === 'speed') {
+      const apiDir = sortDir === 'asc' ? 'desc' : 'asc';
+      return { order_by: 'latency_ms', order_dir: apiDir };
+    }
+
+    return {};
+  }
+
+  function isActiveUp(key: Exclude<SortKey, ''>) {
+    return sortKey === key && sortDir === 'asc';
+  }
+  function isActiveDown(key: Exclude<SortKey, ''>) {
+    return sortKey === key && sortDir === 'desc';
+  }
+  function isNeutral(key: Exclude<SortKey, ''>) {
+    return sortKey !== key || sortDir === '';
   }
 
   // Models multi
@@ -88,9 +139,6 @@
       if (dateFrom.trim()) params.set('date_from', dateFrom.trim());
       if (dateTo.trim()) params.set('date_to', dateTo.trim());
 
-      // Передаём текущие выборы — backend делает фасетную логику:
-      // - models опции зависят от user_names, но не от models
-      // - userNames опции зависят от models, но не от user_names
       for (const m of selectedModels) params.append('models', m);
       for (const u of selectedUserNames) params.append('user_names', u);
 
@@ -130,12 +178,13 @@
 
       if (dateFrom.trim()) params.set('date_from', dateFrom.trim());
       if (dateTo.trim()) params.set('date_to', dateTo.trim());
-      if (orderBy) params.set('order_by', orderBy);
-      if (orderDir) params.set('order_dir', orderDir);
 
-      // new filters
       for (const m of selectedModels) params.append('models', m);
       for (const u of selectedUserNames) params.append('user_names', u);
+
+      const s = buildSortParams();
+      if (s.order_by) params.set('order_by', s.order_by);
+      if (s.order_dir) params.set('order_dir', s.order_dir);
 
       const res = await fetch(`${WEBUI_BASE_URL}/api/billing?${params.toString()}`, {
         method: 'GET',
@@ -169,6 +218,46 @@
     await loadPage(1);
   };
 
+  const exportCsv = async () => {
+    try {
+      const params = new URLSearchParams();
+
+      if (dateFrom.trim()) params.set('date_from', dateFrom.trim());
+      if (dateTo.trim()) params.set('date_to', dateTo.trim());
+
+      for (const m of selectedModels) params.append('models', m);
+      for (const u of selectedUserNames) params.append('user_names', u);
+
+      const s = buildSortParams();
+      if (s.order_by) params.set('order_by', s.order_by);
+      if (s.order_dir) params.set('order_dir', s.order_dir);
+
+      const res = await fetch(`${WEBUI_BASE_URL}/api/billing/export?${params.toString()}`, {
+        method: 'GET',
+        headers: {
+          ...(localStorage.token && { Authorization: `Bearer ${localStorage.token}` })
+        }
+      });
+
+      if (!res.ok) throw new Error('Не удалось скачать CSV');
+
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `billing_${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error(e);
+      error = e instanceof Error ? e.message : 'Ошибка экспорта CSV';
+    }
+  };
+
   onMount(() => {
     const onDocClick = (e: MouseEvent) => {
       const t = e.target as Node;
@@ -193,45 +282,9 @@
     const tokensPerSec = 1000 / latencyMs;
     return `${tokensPerSec.toFixed(2)} т/с`;
   }
-const exportCsv = async () => {
-    try {
-      const params = new URLSearchParams();
-
-      if (dateFrom.trim()) params.set('date_from', dateFrom.trim());
-      if (dateTo.trim()) params.set('date_to', dateTo.trim());
-      if (orderBy) params.set('order_by', orderBy);
-      if (orderDir) params.set('order_dir', orderDir);
-
-      for (const m of selectedModels) params.append('models', m);
-      for (const u of selectedUserNames) params.append('user_names', u);
-
-      const res = await fetch(`${WEBUI_BASE_URL}/api/billing/export?${params.toString()}`, {
-        method: 'GET',
-        headers: {
-          ...(localStorage.token && { Authorization: `Bearer ${localStorage.token}` })
-        }
-      });
-
-      if (!res.ok) throw new Error('Не удалось скачать CSV');
-
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `billing_${new Date().toISOString().slice(0, 10)}.csv`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-
-      URL.revokeObjectURL(url);
-    } catch (e) {
-      console.error(e);
-      // можно красиво показать error, но минимум:
-      error = e instanceof Error ? e.message : 'Ошибка экспорта CSV';
-    }
-  };
 </script>
+
+
 
 <div class="px-4.5 w-full mx-auto max-w-7xl py-4 space-y-3">
   <!-- Filters Panel -->
@@ -415,33 +468,6 @@ const exportCsv = async () => {
         {/if}
       </div>
 
-      <!-- Order By -->
-      <div class="flex-1 min-w-[140px]">
-        <label class="block text-xs text-gray-600 dark:text-gray-400 mb-0.5">Сортировка</label>
-        <select
-          class="w-full px-2 py-1 text-xs rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-          bind:value={orderBy}
-        >
-          <option value="">По умолчанию</option>
-          <option value="prompt_tokens">Вх. токены</option>
-          <option value="completion_tokens">Вых. токены</option>
-          <option value="cost_usd">Стоимость</option>
-          <option value="latency_ms">Скорость</option>
-        </select>
-      </div>
-
-      <!-- Order Direction -->
-      <div class="flex-1 min-w-[120px]">
-        <label class="block text-xs text-gray-600 dark:text-gray-400 mb-0.5">Порядок</label>
-        <select
-          class="w-full px-2 py-1 text-xs rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-          bind:value={orderDir}
-        >
-          <option value="desc">Убывание</option>
-          <option value="asc">Возрастание</option>
-        </select>
-      </div>
-
       <!-- Apply Button -->
       <button
         class="px-3 py-1 text-xs font-medium rounded border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-default"
@@ -479,39 +505,131 @@ const exportCsv = async () => {
         >
           Вперёд
         </button>
-<button
-        class="px-3 py-1 text-xs font-medium rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-default"
-        on:click={exportCsv}
-        disabled={loading || optionsLoading}
-        title="Скачать CSV с применёнными фильтрами"
-      >
-        Скачать CSV
-      </button>
+
+        <button
+          class="px-3 py-1 text-xs font-medium rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-default"
+          on:click={exportCsv}
+          disabled={loading || optionsLoading}
+          title="Скачать CSV с применёнными фильтрами"
+        >
+          Скачать CSV
+        </button>
       </div>
     </div>
 
     <div class="overflow-x-auto border border-gray-200 dark:border-gray-800 rounded-xl bg-white dark:bg-gray-900 shadow-sm">
       <table class="w-full text-sm text-left">
-        <thead
-          class="text-xs font-medium text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700"
-        >
+        <thead class="text-xs font-medium text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
           <tr>
             <th class="px-4 py-3 whitespace-nowrap">Время создания</th>
             <th class="px-4 py-3 whitespace-nowrap">Пользователь</th>
             <th class="px-4 py-3 whitespace-nowrap">Модель</th>
-            <th class="px-4 py-3 whitespace-nowrap text-right">Вх. токены</th>
-            <th class="px-4 py-3 whitespace-nowrap text-right">Вых. токены</th>
-            <th class="px-4 py-3 whitespace-nowrap text-right">Всего токенов</th>
-            <th class="px-4 py-3 whitespace-nowrap text-right">Стоимость $</th>
-            <th class="px-4 py-3 whitespace-nowrap text-right">Скорость</th>
+
+            <!-- Sortable headers -->
+            <th class="px-4 py-3 whitespace-nowrap text-right">
+              <button
+                class="w-full inline-flex items-center justify-end gap-2 hover:underline select-none"
+                type="button"
+                on:click={() => { cycleSort('promptTokens'); loadPage(1); }}
+                title="Сортировать по входным токенам"
+              >
+                <span>Вх. токены</span>
+                <span class="inline-flex flex-col leading-none text-[10px]">
+                  <span class={isActiveUp('promptTokens') ? 'text-blue-600 dark:text-blue-400' : 'text-gray-400 dark:text-gray-600'}>
+                    ▲
+                  </span>
+                  <span class={isActiveDown('promptTokens') ? 'text-blue-600 dark:text-blue-400' : 'text-gray-400 dark:text-gray-600'}>
+                    ▼
+                  </span>
+                </span>
+              </button>
+            </th>
+
+            <th class="px-4 py-3 whitespace-nowrap text-right">
+              <button
+                class="w-full inline-flex items-center justify-end gap-2 hover:underline select-none"
+                type="button"
+                on:click={() => { cycleSort('completionTokens'); loadPage(1); }}
+                title="Сортировать по выходным токенам"
+              >
+                <span>Вых. токены</span>
+                <span class="inline-flex flex-col leading-none text-[10px]">
+                  <span class={isActiveUp('completionTokens') ? 'text-blue-600 dark:text-blue-400' : 'text-gray-400 dark:text-gray-600'}>
+                    ▲
+                  </span>
+                  <span class={isActiveDown('completionTokens') ? 'text-blue-600 dark:text-blue-400' : 'text-gray-400 dark:text-gray-600'}>
+                    ▼
+                  </span>
+                </span>
+              </button>
+            </th>
+
+            <th class="px-4 py-3 whitespace-nowrap text-right">
+              <button
+                class="w-full inline-flex items-center justify-end gap-2 hover:underline select-none"
+                type="button"
+                on:click={() => { cycleSort('totalTokens'); loadPage(1); }}
+                title="Сортировать по сумме токенов"
+              >
+                <span>Всего токенов</span>
+                <span class="inline-flex flex-col leading-none text-[10px]">
+                  <span class={isActiveUp('totalTokens') ? 'text-blue-600 dark:text-blue-400' : 'text-gray-400 dark:text-gray-600'}>
+                    ▲
+                  </span>
+                  <span class={isActiveDown('totalTokens') ? 'text-blue-600 dark:text-blue-400' : 'text-gray-400 dark:text-gray-600'}>
+                    ▼
+                  </span>
+                </span>
+              </button>
+            </th>
+
+            <th class="px-4 py-3 whitespace-nowrap text-right">
+              <button
+                class="w-full inline-flex items-center justify-end gap-2 hover:underline select-none"
+                type="button"
+                on:click={() => { cycleSort('costUsd'); loadPage(1); }}
+                title="Сортировать по стоимости"
+              >
+                <span>Стоимость $</span>
+                <span class="inline-flex flex-col leading-none text-[10px]">
+                  <span class={isActiveUp('costUsd') ? 'text-blue-600 dark:text-blue-400' : 'text-gray-400 dark:text-gray-600'}>
+                    ▲
+                  </span>
+                  <span class={isActiveDown('costUsd') ? 'text-blue-600 dark:text-blue-400' : 'text-gray-400 dark:text-gray-600'}>
+                    ▼
+                  </span>
+                </span>
+              </button>
+            </th>
+
+            <th class="px-4 py-3 whitespace-nowrap text-right">
+              <button
+                class="w-full inline-flex items-center justify-end gap-2 hover:underline select-none"
+                type="button"
+                on:click={() => { cycleSort('speed'); loadPage(1); }}
+                title="Сортировать по скорости (т/с)"
+              >
+                <span>Скорость</span>
+                <span class="inline-flex flex-col leading-none text-[10px]">
+                  <span class={isActiveUp('speed') ? 'text-blue-600 dark:text-blue-400' : 'text-gray-400 dark:text-gray-600'}>
+                    ▲
+                  </span>
+                  <span class={isActiveDown('speed') ? 'text-blue-600 dark:text-blue-400' : 'text-gray-400 dark:text-gray-600'}>
+                    ▼
+                  </span>
+                </span>
+              </button>
+            </th>
           </tr>
         </thead>
+
         <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
           {#each items as item}
             <tr class="hover:bg-gray-50 dark:hover:bg-gray-800/50">
               <td class="px-4 py-3 text-gray-700 dark:text-gray-300 whitespace-nowrap">
                 {item.createdAt || '—'}
               </td>
+
               <td class="px-4 py-3 text-gray-700 dark:text-gray-300">
                 {#if item.userName || item.userEmail}
                   <div class="max-w-xs">
@@ -524,6 +642,7 @@ const exportCsv = async () => {
                   <span class="text-gray-400 dark:text-gray-500">—</span>
                 {/if}
               </td>
+
               <td class="px-4 py-3 text-gray-700 dark:text-gray-300">
                 <div class="max-w-sm">
                   {#if item.provider}
@@ -532,6 +651,7 @@ const exportCsv = async () => {
                   <span class="break-words">{item.model ?? '—'}</span>
                 </div>
               </td>
+
               <td class="px-4 py-3 text-gray-700 dark:text-gray-300 text-right tabular-nums">
                 {item.promptTokens ?? '—'}
               </td>
