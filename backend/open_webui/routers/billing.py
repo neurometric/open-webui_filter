@@ -38,6 +38,8 @@ class BillingOptions(BaseModel):
     models: List[str]
     userNames: List[str]
 
+class BillingSummary(BaseModel):
+    totalCostUsd: float = 0.0
 
 def _safe_list(values: Optional[List[str]]) -> List[str]:
     if not values:
@@ -424,3 +426,41 @@ async def export_billing_csv(
         log.exception("Failed to export billing csv: %s", e)
         headers = {"Content-Disposition": 'attachment; filename="billing.csv"'}
         return StreamingResponse(iter([b"\ufeffcreatedAt\n"]), media_type="text/csv; charset=utf-8", headers=headers)
+
+@router.get(
+    "/billing/summary",
+    response_model=BillingSummary,
+    summary="Get billing summary (total cost) from response_meta with filters applied",
+)
+async def get_billing_summary(
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    models: Optional[List[str]] = Query(default=None),
+    user_names: Optional[List[str]] = Query(default=None),
+    user=Depends(get_verified_user),
+) -> BillingSummary:
+    try:
+        where_sql, where_params = _build_where(date_from, date_to, models, user_names)
+        params = {**where_params}
+
+        query = f"""
+            SELECT COALESCE(SUM(cost_usd), 0) AS total_cost_usd
+            FROM response_meta
+            {where_sql}
+        """
+
+        stmt = text(query)
+        if "models" in params:
+            stmt = stmt.bindparams(bindparam("models", expanding=True))
+        if "user_names" in params:
+            stmt = stmt.bindparams(bindparam("user_names", expanding=True))
+
+        row = Session.execute(stmt, params).mappings().first()
+        total_cost = float(row.get("total_cost_usd") or 0)
+
+        return BillingSummary(totalCostUsd=total_cost)
+
+    except Exception as e:
+        log.exception("Failed to load billing summary from DB: %s", e)
+        return BillingSummary(totalCostUsd=0.0)
+
