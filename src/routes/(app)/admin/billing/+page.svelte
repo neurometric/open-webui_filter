@@ -373,15 +373,15 @@ if (sumRes.ok) {
         <label class="block text-xs text-gray-600 dark:text-gray-400 mb-0.5">Модели</label>
 
         <div
-          class="w-full min-h-[28px] px-2 py-1 text-xs rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 outline-none focus-within:ring-1 focus-within:ring-blue-500 focus-within:border-blue-500 cursor-text"
+          class="w-full h-[28px] px-2 py-1 text-xs rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 outline-none focus-within:ring-1 focus-within:ring-blue-500 focus-within:border-blue-500 cursor-text overflow-hidden"
           on:click|stopPropagation={() => (modelDropdownOpen = !modelDropdownOpen)}
           role="button"
           tabindex="0"
         >
-          <div class="flex flex-wrap items-center gap-1">
+          <div class="flex items-center gap-1 overflow-x-auto whitespace-nowrap pr-1">
             {#each selectedModels as m}
               <span
-                class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800"
+                class="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800"
               >
                 <span class="max-w-[140px] truncate">{m}</span>
                 <button
@@ -398,6 +398,7 @@ if (sumRes.ok) {
 
             <input
               class="min-w-[120px] flex-1 px-1 py-0.5 text-xs bg-transparent outline-none"
+              style="min-width: 120px;"
               placeholder={selectedModels.length === 0 ? 'Выберите модели' : 'Поиск…'}
               bind:value={modelSearch}
               on:focus={() => (modelDropdownOpen = true)}
@@ -452,7 +453,7 @@ if (sumRes.ok) {
         <label class="block text-xs text-gray-600 dark:text-gray-400 mb-0.5">Пользователь</label>
 
         <div
-          class="w-full min-h-[28px] px-2 py-1 text-xs rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 outline-none focus-within:ring-1 focus-within:ring-blue-500 focus-within:border-blue-500 cursor-text"
+          class="w-full h-[28px] px-2 py-1 text-xs rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 outline-none focus-within:ring-1 focus-within:ring-blue-500 focus-within:border-blue-500 cursor-text overflow-hidden"
           on:click|stopPropagation={() => (userDropdownOpen = !userDropdownOpen)}
           role="button"
           tabindex="0"
@@ -460,7 +461,7 @@ if (sumRes.ok) {
           <div class="flex flex-wrap items-center gap-1">
             {#each selectedUserNames as u}
               <span
-                class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800"
+                class="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800"
               >
                 <span class="max-w-[140px] truncate">{u}</span>
                 <button
@@ -477,6 +478,7 @@ if (sumRes.ok) {
 
             <input
               class="min-w-[120px] flex-1 px-1 py-0.5 text-xs bg-transparent outline-none"
+              style="min-width: 120px;"
               placeholder={selectedUserNames.length === 0 ? 'Выберите пользователя' : 'Поиск…'}
               bind:value={userSearch}
               on:focus={() => (userDropdownOpen = true)}
