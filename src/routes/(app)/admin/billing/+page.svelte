@@ -20,7 +20,8 @@
     models: string[];
     userNames: string[];
   };
-
+  type BillingSummary = { totalCostUsd: number };
+  
   type SortKey = '' | 'promptTokens' | 'completionTokens' | 'totalTokens' | 'costUsd' | 'speed';
   type SortDir = '' | 'asc' | 'desc';
 
@@ -30,6 +31,9 @@
   let page = 1;
   const pageSize = 10;
   let isLastPage = false;
+
+  // Summary cost
+  let totalCostUsd: number | null = null;
 
   // Filters
   let dateFrom = '';
@@ -165,6 +169,42 @@
       optionsLoading = false;
     }
   };
+  
+  const loadSummary = async () => {
+  try {
+    const params = new URLSearchParams();
+
+    if (dateFrom.trim()) params.set('date_from', dateFrom.trim());
+    if (dateTo.trim()) params.set('date_to', dateTo.trim());
+
+    for (const m of selectedModels) params.append('models', m);
+    for (const u of selectedUserNames) params.append('user_names', u);
+
+    const s = buildSortParams();
+    if (s.order_by) params.set('order_by', s.order_by);
+    if (s.order_dir) params.set('order_dir', s.order_dir);
+
+    const res = await fetch(`${WEBUI_BASE_URL}/api/billing/summary?${params.toString()}`, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        ...(localStorage.token && { Authorization: `Bearer ${localStorage.token}` })
+       }
+     });
+
+     if (!res.ok) {
+       totalCostUsd = null;
+       return;
+     }
+
+     const data = (await res.json()) as BillingSummary;
+     totalCostUsd = typeof data?.totalCostUsd === 'number' ? data.totalCostUsd : 0;
+   } catch (e) {
+     console.error(e);
+     totalCostUsd = null;
+   }
+ };
 
   const loadPage = async (targetPage: number) => {
     loading = true;
@@ -185,26 +225,42 @@
       const s = buildSortParams();
       if (s.order_by) params.set('order_by', s.order_by);
       if (s.order_dir) params.set('order_dir', s.order_dir);
+    const [res, sumRes] = await Promise.all([
+  fetch(`${WEBUI_BASE_URL}/api/billing?${params.toString()}`, {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+      ...(localStorage.token && { Authorization: `Bearer ${localStorage.token}` })
+    }
+  }),
+  fetch(`${WEBUI_BASE_URL}/api/billing/summary?${params.toString()}`, {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+      ...(localStorage.token && { Authorization: `Bearer ${localStorage.token}` })
+    }
+  })
+]);
 
-      const res = await fetch(`${WEBUI_BASE_URL}/api/billing?${params.toString()}`, {
-        method: 'GET',
-        headers: {
-          Accept: 'application/json',
-          'Content-Type': 'application/json',
-          ...(localStorage.token && { Authorization: `Bearer ${localStorage.token}` })
-        }
-      });
+if (!res.ok) {
+  const body = await res.json().catch(() => ({}));
+  const detail = body?.detail ?? res.statusText ?? 'Ошибка загрузки данных';
+  throw new Error(typeof detail === 'string' ? detail : 'Ошибка загрузки данных');
+}
 
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        const detail = body?.detail ?? res.statusText ?? 'Ошибка загрузки данных';
-        throw new Error(typeof detail === 'string' ? detail : 'Ошибка загрузки данных');
-      }
+const data = (await res.json()) as BillingItem[];
+items = Array.isArray(data) ? data : [];
+page = safePage;
+isLastPage = items.length < pageSize;
 
-      const data = (await res.json()) as BillingItem[];
-      items = Array.isArray(data) ? data : [];
-      page = safePage;
-      isLastPage = items.length < pageSize;
+if (sumRes.ok) {
+  const s = (await sumRes.json()) as BillingSummary;
+  totalCostUsd = typeof s?.totalCostUsd === 'number' ? s.totalCostUsd : 0;
+} else {
+  totalCostUsd = null;
+}
     } catch (e: unknown) {
       console.error(e);
       error = e instanceof Error ? e.message : 'Не удалось загрузить данные';
@@ -215,6 +271,7 @@
 
   const applyFilters = async () => {
     await loadOptions();
+    await loadSummary();
     await loadPage(1);
   };
 
@@ -269,6 +326,7 @@
 
     (async () => {
       await loadOptions();
+      await loadSummary();
       await loadPage(1);
     })();
 
@@ -491,6 +549,16 @@
     <div class="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 mb-2">
       <div>Страница {page}</div>
       <div class="inline-flex gap-2">
+        <div
+           class="px-3 py-1 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200"
+           title="Сумма по всем строкам с учетом фильтров (не только текущая страница)" >
+           <span class="font-medium">Итоговая стоимость:</span>
+           {#if totalCostUsd == null}
+             <span class="ml-1 text-gray-400 dark:text-gray-500">—</span>
+           {:else}
+             <span class="ml-1 tabular-nums">${totalCostUsd.toFixed(6)}</span>
+           {/if}
+        </div>
         <button
           class="px-2 py-1 rounded border border-gray-200 dark:border-gray-700 disabled:opacity-40 disabled:cursor-default hover:bg-gray-50 dark:hover:bg-gray-800"
           on:click={() => loadPage(page - 1)}
