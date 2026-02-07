@@ -149,11 +149,31 @@
 					class="items-center px-4 py-2 border-b border-gray-100 dark:border-gray-800 text-xs text-gray-500 dark:text-gray-400 flex flex-wrap gap-x-4 gap-y-1"
 				>
 					<span>{request.time}</span>
-					{#if request.conversationId}
-						<a href="/c/{request.conversationId}" class="underline-offset-2 hover:underline">Чат</a>
-					{:else}
-						<span class="text-gray-400 dark:text-gray-500">без чата</span>
-					{/if}
+                    {#if request.conversationId}
+                      <a
+                        href={`/c/${request.conversationId}`}
+                        class="inline-flex items-center gap-1 text-white hover:underline underline-offset-2"
+                        title="Открыть источник"
+                      >
+                        Источник
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          class="h-3 w-3 opacity-80"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                          stroke-width="2"
+                        >
+                          <path
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            d="M13.828 10.172a4 4 0 010 5.656l-3 3a4 4 0 01-5.656-5.656l1.5-1.5m6.828-1.828a4 4 0 010-5.656l3-3a4 4 0 115.656 5.656l-1.5 1.5"
+                          />
+                        </svg>
+                      </a>
+                    {:else}
+                      <span class="text-gray-400 dark:text-gray-500">Без источника</span>
+                    {/if}
 					{#if request.userName || request.userEmail || request.userRole}
 						<span class="text-gray-600 dark:text-gray-300">
 							{request.userName ?? '—'}
@@ -172,13 +192,7 @@
 						<span
 							class="px-2 py-0.5 rounded-full bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300 border border-red-100 dark:border-red-900"
 						>
-							ПнД
-						</span>
-					{:else}
-						<span
-							class="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-100 dark:border-emerald-900"
-						>
-							ПнД
+							ПДн
 						</span>
 					{/if}
 				</div>
