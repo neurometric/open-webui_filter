@@ -371,59 +371,84 @@ if (sumRes.ok) {
       <!-- Models Multi Select -->
       <div class="flex-[2] min-w-[240px] relative" bind:this={modelBoxEl}>
         <label class="block text-xs text-gray-600 dark:text-gray-400 mb-0.5">Модели</label>
-
         <div
-          class="w-full h-[28px] px-2 py-1 text-xs rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 outline-none focus-within:ring-1 focus-within:ring-blue-500 focus-within:border-blue-500 cursor-text overflow-hidden"
+          class="w-full h-[28px] px-2 py-1 text-xs rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 outline-none focus-within:ring-1 focus-within:ring-blue-500 focus-within:border-blue-500 cursor-text flex items-center gap-2 overflow-hidden"
           on:click|stopPropagation={() => (modelDropdownOpen = !modelDropdownOpen)}
           role="button"
           tabindex="0"
         >
-          <div class="flex items-center gap-1 overflow-x-auto whitespace-nowrap pr-1">
-            {#each selectedModels as m}
-              <span
-                class="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800"
-              >
-                <span class="max-w-[140px] truncate">{m}</span>
-                <button
-                  class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-                  on:click|stopPropagation={() => removeModel(m)}
-                  aria-label="Удалить"
-                  title="Удалить"
-                  type="button"
+          <!-- Scroll: только выбранные элементы -->
+          <div class="flex-1 overflow-x-auto hscroll-no-bar">
+            <div class="flex items-center gap-1 whitespace-nowrap pr-1">
+              {#each selectedModels as m}
+                <span
+                  class="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800"
                 >
-                  ✕
-                </button>
-              </span>
-            {/each}
+                  <span class="max-w-[160px] truncate">{m}</span>
+                  <button
+                    class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                    on:click|stopPropagation={() => removeModel(m)}
+                    aria-label="Удалить"
+                    title="Удалить"
+                    type="button"
+                  >
+                    ✕
+                  </button>
+                </span>
+              {/each}
 
-            <input
-              class="min-w-[120px] flex-1 px-1 py-0.5 text-xs bg-transparent outline-none"
-              style="min-width: 120px;"
-              placeholder={selectedModels.length === 0 ? 'Выберите модели' : 'Поиск…'}
-              bind:value={modelSearch}
-              on:focus={() => (modelDropdownOpen = true)}
-              on:click|stopPropagation={() => (modelDropdownOpen = true)}
-            />
-
-            {#if selectedModels.length > 0}
-              <button
-                class="text-[11px] px-1.5 py-0.5 rounded border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"
-                on:click|stopPropagation={clearModels}
-                aria-label="Очистить всё"
-                title="Очистить всё"
-                type="button"
-              >
-                Очистить
-              </button>
-            {/if}
+              {#if selectedModels.length === 0}
+                <span class="text-gray-400 dark:text-gray-500">Выберите модели</span>
+              {/if}
+            </div>
           </div>
-        </div>
 
+          <!-- Fixed right icons -->
+          <div class="shrink-0 inline-flex items-center gap-1 self-center">
+  {#if selectedModels.length > 0}
+    <!-- ✕ слева -->
+    <button
+      class="h-[20px] w-[24px] inline-flex items-center justify-center rounded border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"
+      on:click|stopPropagation={clearModels}
+      aria-label="Очистить всё"
+      title="Очистить всё"
+      type="button"
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+      </svg>
+    </button>
+  {/if}
+
+  <!-- 🔍 ВСЕГДА крайняя справа -->
+  <button
+    class="h-[20px] w-[24px] ml-auto inline-flex items-center justify-center rounded border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"
+    on:click|stopPropagation={() => (modelDropdownOpen = true)}
+    aria-label="Поиск"
+    title="Поиск"
+    type="button"
+  >
+    <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path stroke-linecap="round" stroke-linejoin="round"
+        d="M21 21l-4.35-4.35m1.85-5.15a7 7 0 11-14 0 7 7 0 0114 0z" />
+    </svg>
+  </button>
+</div>
+        </div>
+      
         {#if modelDropdownOpen}
           <div
             class="absolute left-0 top-full mt-1 w-full z-50 border border-gray-200 dark:border-gray-700 rounded bg-white dark:bg-gray-900 shadow-sm overflow-hidden"
             on:click|stopPropagation
           >
+            <div class="p-2 border-b border-gray-200 dark:border-gray-700">
+              <input
+                class="w-full px-2 py-1 text-xs rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="Поиск…"
+                bind:value={modelSearch}
+                on:click|stopPropagation
+              />
+            </div>
             <div class="max-h-[300px] overflow-auto">
               {#if optionsLoading}
                 <div class="p-2 text-xs text-gray-400 dark:text-gray-600">Загрузка…</div>
@@ -450,83 +475,132 @@ if (sumRes.ok) {
 
       <!-- UserNames Multi Select -->
       <div class="flex-[2] min-w-[240px] relative" bind:this={userBoxEl}>
-        <label class="block text-xs text-gray-600 dark:text-gray-400 mb-0.5">Пользователь</label>
+  <label class="block text-xs text-gray-600 dark:text-gray-400 mb-0.5">Пользователь</label>
 
-        <div
-          class="w-full h-[28px] px-2 py-1 text-xs rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 outline-none focus-within:ring-1 focus-within:ring-blue-500 focus-within:border-blue-500 cursor-text overflow-hidden"
-          on:click|stopPropagation={() => (userDropdownOpen = !userDropdownOpen)}
-          role="button"
-          tabindex="0"
-        >
-          <div class="flex flex-wrap items-center gap-1">
-            {#each selectedUserNames as u}
-              <span
-                class="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800"
-              >
-                <span class="max-w-[140px] truncate">{u}</span>
-                <button
-                  class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-                  on:click|stopPropagation={() => removeUserName(u)}
-                  aria-label="Удалить"
-                  title="Удалить"
-                  type="button"
-                >
-                  ✕
-                </button>
-              </span>
-            {/each}
-
-            <input
-              class="min-w-[120px] flex-1 px-1 py-0.5 text-xs bg-transparent outline-none"
-              style="min-width: 120px;"
-              placeholder={selectedUserNames.length === 0 ? 'Выберите пользователя' : 'Поиск…'}
-              bind:value={userSearch}
-              on:focus={() => (userDropdownOpen = true)}
-              on:click|stopPropagation={() => (userDropdownOpen = true)}
-            />
-
-            {#if selectedUserNames.length > 0}
-              <button
-                class="text-[11px] px-1.5 py-0.5 rounded border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"
-                on:click|stopPropagation={clearUserNames}
-                aria-label="Очистить всё"
-                title="Очистить всё"
-                type="button"
-              >
-                Очистить
-              </button>
-            {/if}
-          </div>
-        </div>
-
-        {#if userDropdownOpen}
-          <div
-            class="absolute left-0 top-full mt-1 w-full z-50 border border-gray-200 dark:border-gray-700 rounded bg-white dark:bg-gray-900 shadow-sm overflow-hidden"
-            on:click|stopPropagation
+  <div
+    class="w-full h-[28px] px-2 py-1 text-xs rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 outline-none focus-within:ring-1 focus-within:ring-blue-500 focus-within:border-blue-500 cursor-text flex items-center gap-2 overflow-hidden"
+    on:click|stopPropagation={() => (userDropdownOpen = !userDropdownOpen)}
+    role="button"
+    tabindex="0"
+  >
+    <!-- Scroll: только выбранные элементы -->
+    <div class="flex-1 overflow-x-auto hscroll-no-bar">
+      <div class="flex items-center gap-1 whitespace-nowrap pr-1">
+        {#each selectedUserNames as u}
+          <span
+            class="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800"
           >
-            <div class="max-h-[300px] overflow-auto">
-              {#if optionsLoading}
-                <div class="p-2 text-xs text-gray-400 dark:text-gray-600">Загрузка…</div>
-              {:else}
-                {#each options.userNames.filter((u) => !userSearch.trim() || containsCI(u, userSearch.trim())) as u}
-                  <button
-                    class="w-full text-left px-2 py-1.5 text-xs hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center gap-2"
-                    on:click={() => toggleUserName(u)}
-                    type="button"
-                  >
-                    <span class="inline-block w-4 text-center">
-                      {#if selectedUserNames.includes(u)}✓{:else}&nbsp;{/if}
-                    </span>
-                    <span class="truncate">{u}</span>
-                  </button>
-                {:else}
-                  <div class="p-2 text-xs text-gray-400 dark:text-gray-600">Нет совпадений</div>
-                {/each}
-              {/if}
-            </div>
-          </div>
+            <span class="max-w-[160px] truncate">{u}</span>
+            <button
+              class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+              on:click|stopPropagation={() => removeUserName(u)}
+              aria-label="Удалить"
+              title="Удалить"
+              type="button"
+            >
+              ✕
+            </button>
+          </span>
+        {/each}
+
+        {#if selectedUserNames.length === 0}
+          <span class="text-gray-400 dark:text-gray-500">Выберите пользователя</span>
         {/if}
       </div>
+    </div>
+
+    <!-- Fixed right icons -->
+    <!-- Fixed right icons -->
+<div class="shrink-0 inline-flex items-center gap-1 self-center">
+  {#if selectedUserNames.length > 0}
+    <!-- ✕ слева -->
+    <button
+      class="h-[20px] w-[24px] inline-flex items-center justify-center rounded border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"
+      on:click|stopPropagation={clearUserNames}
+      aria-label="Очистить всё"
+      title="Очистить всё"
+      type="button"
+    >
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        class="h-3 w-3"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+      >
+        <path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          d="M6 18L18 6M6 6l12 12"
+        />
+      </svg>
+    </button>
+  {/if}
+
+  <!-- 🔍 всегда крайняя справа -->
+  <button
+    class="h-[20px] w-[24px] ml-auto inline-flex items-center justify-center rounded border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"
+    on:click|stopPropagation={() => (userDropdownOpen = true)}
+    aria-label="Поиск"
+    title="Поиск"
+    type="button"
+  >
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      class="h-3 w-3"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+    >
+      <path
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        d="M21 21l-4.35-4.35m1.85-5.15a7 7 0 11-14 0 7 7 0 0114 0z"
+      />
+    </svg>
+  </button>
+</div>
+  </div>
+
+  {#if userDropdownOpen}
+    <div
+      class="absolute left-0 top-full mt-1 w-full z-50 border border-gray-200 dark:border-gray-700 rounded bg-white dark:bg-gray-900 shadow-sm overflow-hidden"
+      on:click|stopPropagation
+    >
+      <div class="p-2 border-b border-gray-200 dark:border-gray-700">
+        <input
+          class="w-full px-2 py-1 text-xs rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+          placeholder="Поиск…"
+          bind:value={userSearch}
+          on:click|stopPropagation
+        />
+      </div>
+
+      <div class="max-h-[300px] overflow-auto">
+        {#if optionsLoading}
+          <div class="p-2 text-xs text-gray-400 dark:text-gray-600">Загрузка…</div>
+        {:else}
+          {#each options.userNames.filter((u) => !userSearch.trim() || containsCI(u, userSearch.trim())) as u}
+            <button
+              class="w-full text-left px-2 py-1.5 text-xs hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center gap-2"
+              on:click={() => toggleUserName(u)}
+              type="button"
+            >
+              <span class="inline-block w-4 text-center">
+                {#if selectedUserNames.includes(u)}✓{:else}&nbsp;{/if}
+              </span>
+              <span class="truncate">{u}</span>
+            </button>
+          {:else}
+            <div class="p-2 text-xs text-gray-400 dark:text-gray-600">Нет совпадений</div>
+          {/each}
+        {/if}
+      </div>
+    </div>
+  {/if}
+</div>
 
       <!-- Apply Button -->
       <button
@@ -764,3 +838,13 @@ if (sumRes.ok) {
     </div>
   {/if}
 </div>
+
+<style>
+  .hscroll-no-bar {
+    -ms-overflow-style: none; /* old Edge/IE */
+    scrollbar-width: none;    /* Firefox */
+  }
+  .hscroll-no-bar::-webkit-scrollbar {
+    height: 0; /* Chrome/Safari */
+  }
+</style>
