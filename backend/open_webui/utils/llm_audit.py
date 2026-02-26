@@ -160,6 +160,86 @@ async def sanitize_payload_last_user_message(payload: dict) -> SanitizeResult:
         is_user_input=True,
     )
 
+async def sanitize_text_for_audit(text: str) -> tuple[str, int, str, Optional[str]]:
+    """
+    Returns: masked_text, has_pii, policy_id, detector_version
+    """
+    policy_id = os.getenv("SANITIZER_POLICY", "default")
+    sanitizer_url = os.getenv("SANITIZER_URL", "").strip()
+
+    raw_text = text or ""
+    if not isinstance(raw_text, str):
+        raw_text = str(raw_text)
+
+    masked_text = raw_text
+    has_pii = 0
+    detector_version = None
+
+    if sanitizer_url:
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                resp = await client.post(
+                    sanitizer_url,
+                    json={"text": raw_text, "policy_id": policy_id},
+                )
+                resp.raise_for_status()
+                data = resp.json() if resp.content else {}
+
+            masked_text = data.get("masked_text", raw_text)
+            has_pii = int(data.get("has_pii", 0) or 0)
+            policy_id = data.get("policy_id", policy_id)
+            detector_version = data.get("detector_version")
+        except Exception:
+            masked_text = raw_text
+            has_pii = 0
+            detector_version = None
+
+    # DB safety truncate (как у тебя)
+    if len(raw_text) > 50_000:
+        raw_text = raw_text[:50_000] + "...TRUNCATED"
+    if isinstance(masked_text, str) and len(masked_text) > 50_000:
+        masked_text = masked_text[:50_000] + "...TRUNCATED"
+
+    return masked_text, (1 if has_pii else 0), policy_id, detector_version
+
+def sanitize_text_for_audit_sync(text: str) -> tuple[str, int, str, Optional[str]]:
+    policy_id = os.getenv("SANITIZER_POLICY", "default")
+    sanitizer_url = os.getenv("SANITIZER_URL", "").strip()
+
+    raw_text = text or ""
+    if not isinstance(raw_text, str):
+        raw_text = str(raw_text)
+
+    masked_text = raw_text
+    has_pii = 0
+    detector_version = None
+
+    if sanitizer_url:
+        try:
+            with httpx.Client(timeout=5.0) as client:
+                resp = client.post(
+                    sanitizer_url,
+                    json={"text": raw_text, "policy_id": policy_id},
+                )
+                resp.raise_for_status()
+                data = resp.json() if resp.content else {}
+
+            masked_text = data.get("masked_text", raw_text)
+            has_pii = int(data.get("has_pii", 0) or 0)
+            policy_id = data.get("policy_id", policy_id)
+            detector_version = data.get("detector_version")
+        except Exception:
+            masked_text = raw_text
+            has_pii = 0
+            detector_version = None
+
+    if len(raw_text) > 50_000:
+        raw_text = raw_text[:50_000] + "...TRUNCATED"
+    if isinstance(masked_text, str) and len(masked_text) > 50_000:
+        masked_text = masked_text[:50_000] + "...TRUNCATED"
+
+    return masked_text, (1 if has_pii else 0), policy_id, detector_version
+
 @dataclass
 class LLMResponseMeta:
     user_id: Optional[str]
