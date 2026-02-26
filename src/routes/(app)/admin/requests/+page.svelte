@@ -151,7 +151,7 @@
 					<span>{request.time}</span>
                     {#if request.conversationId}
                       <a
-                        href={`/c/${request.conversationId}`}
+                        href={`/s/${request.conversationId}`}
                         class="inline-flex items-center gap-1 text-white hover:underline underline-offset-2"
                         title="Открыть источник"
                       >

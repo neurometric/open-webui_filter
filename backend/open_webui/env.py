@@ -113,7 +113,7 @@ for source in log_sources:
 log.setLevel(SRC_LOG_LEVELS["CONFIG"])
 
 # Меняем последнее значение на нужное название
-WEBUI_NAME = os.environ.get("APP_NAME") or os.environ.get("FM0", "FM1")
+WEBUI_NAME = os.environ.get("APP_NAME") or os.environ.get("AIGate", "AIGate")
 
 WEBUI_FAVICON_URL = "https://openwebui.com/favicon.png"
 
