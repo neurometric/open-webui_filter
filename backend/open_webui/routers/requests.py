@@ -112,7 +112,7 @@ async def get_requests(
         items: List[RequestItem] = []
         for r in rows:
             conversation_id = r.get("conversation_id")
-            chat_link = f"/c/{conversation_id}" if conversation_id else ""
+            chat_link = f"/s/{conversation_id}" if conversation_id else ""
             created_at = r.get("created_at")
 
             items.append(
