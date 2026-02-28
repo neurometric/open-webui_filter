@@ -268,6 +268,7 @@ def update_response_meta_usage(
     total_tokens: Optional[int],
     cost_usd: Optional[float],
     usage_details: Optional[dict] = None,
+    latency_ms: Optional[int] = None,
 ) -> None:
     conn = _db_connect()
     try:
@@ -298,6 +299,7 @@ def update_response_meta_usage(
                     completion_tokens = ?,
                     total_tokens = ?,
                     cost_usd = ?,
+                    latency_ms = COALESCE(?, latency_ms),
                     meta_json = ?
                 WHERE id = ?
                 """,
@@ -306,6 +308,7 @@ def update_response_meta_usage(
                     completion_tokens,
                     total_tokens,
                     cost_usd,
+                    latency_ms,
                     meta_json,
                     response_meta_id,
                 ),
@@ -317,7 +320,8 @@ def update_response_meta_usage(
                 SET prompt_tokens = ?,
                     completion_tokens = ?,
                     total_tokens = ?,
-                    cost_usd = ?
+                    cost_usd = ?,
+                    latency_ms = COALESCE(?, latency_ms)
                 WHERE id = ?
                 """,
                 (
@@ -325,6 +329,7 @@ def update_response_meta_usage(
                     completion_tokens,
                     total_tokens,
                     cost_usd,
+                    latency_ms,
                     response_meta_id,
                 ),
             )
@@ -436,5 +441,22 @@ def insert_audit_rows(
         print("AUDIT: committing...")
         conn.commit()
         return response_meta_id
+    finally:
+        conn.close()
+        
+def update_response_meta_provider_model(*, response_meta_id: str, provider: Optional[str], model: Optional[str]) -> None:
+    conn = _db_connect()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            UPDATE response_meta
+            SET provider = COALESCE(?, provider),
+                model = COALESCE(?, model)
+            WHERE id = ?
+            """,
+            (provider, model, response_meta_id),
+        )
+        conn.commit()
     finally:
         conn.close()

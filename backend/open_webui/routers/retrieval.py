@@ -135,7 +135,7 @@ def audit_one_file(
     has_pii: int,
     policy_id: str | None,
     detector_version: str | None,
-) -> None:
+) -> Optional[str]:
     rm = LLMResponseMeta(
         user_id=user.id,
         session_id=None,
@@ -160,7 +160,7 @@ def audit_one_file(
             "content_type": (file.meta or {}).get("content_type"),
         },
     )
-    insert_audit_rows(
+    response_meta_id = insert_audit_rows(
         response_meta=rm,
         raw_text=raw_text,
         masked_text=masked_text,
@@ -168,7 +168,11 @@ def audit_one_file(
         policy_id=policy_id,
         detector_version=detector_version,
     )
-
+    try:
+        Files.update_file_data_by_id(file.id, {"file_audit_response_meta_id": response_meta_id})
+    except Exception:
+        log.exception("AUDIT FILE: failed to save file_audit_response_meta_id into Files.data")
+    return response_meta_id
 
 def get_ef(
     engine: str,

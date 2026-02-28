@@ -40,7 +40,8 @@ from open_webui.utils.llm_audit import (
     sanitize_payload_last_user_message,
     insert_audit_rows,
     LLMResponseMeta,
-    update_response_meta_usage
+    update_response_meta_usage,
+    update_response_meta_provider_model
 )
 from open_webui.models.users import UserModel
 
@@ -61,7 +62,7 @@ from open_webui.utils.misc import (
 from open_webui.utils.auth import get_admin_user, get_verified_user
 from open_webui.utils.access_control import has_access
 from open_webui.utils.headers import include_user_info_headers
-
+from open_webui.models.files import Files
 
 log = logging.getLogger(__name__)
 log.setLevel(SRC_LOG_LEVELS["OPENAI"])
@@ -107,6 +108,7 @@ async def cleanup_response(
     *,
     response_meta_id: Optional[str] = None,
     capture: Optional["StreamUsageCapture"] = None,
+    file_response_meta_id=None, llm_provider=None, llm_model=None, start_ts=None
 ):
     log.info(
         f"AUDIT CLEANUP: response_meta_id={response_meta_id}, "
@@ -137,6 +139,45 @@ async def cleanup_response(
                 cost_usd=u.get("cost"),
                 usage_details=u,
             )
+    except Exception:
+        log.exception("Failed to update response_meta usage after streaming")
+    try:
+        if capture and capture.usage:
+            
+            u = capture.usage
+            final_latency_ms = None
+            if start_ts:
+                final_latency_ms = int((time.perf_counter() - start_ts) * 1000)
+            # 1) обновляем LLM response_meta (как было)
+            if response_meta_id:
+                update_response_meta_usage(
+                    response_meta_id=response_meta_id,
+                    prompt_tokens=u.get("prompt_tokens"),
+                    completion_tokens=u.get("completion_tokens"),
+                    total_tokens=u.get("total_tokens"),
+                    cost_usd=u.get("cost"),
+                    usage_details=u,
+                    latency_ms=final_latency_ms
+                )
+
+            # 2) ✅ обновляем response_meta, созданный при обработке файла
+            if file_response_meta_id:
+                # поставим настоящую модель/провайдера
+                update_response_meta_provider_model(
+                    response_meta_id=file_response_meta_id,
+                    provider=llm_provider,
+                    model=llm_model,
+                )
+                # и usage/cost
+                update_response_meta_usage(
+                    response_meta_id=file_response_meta_id,
+                    prompt_tokens=u.get("prompt_tokens"),
+                    completion_tokens=u.get("completion_tokens"),
+                    total_tokens=u.get("total_tokens"),
+                    cost_usd=u.get("cost"),
+                    usage_details=u,
+                    latency_ms=final_latency_ms
+                )
     except Exception:
         log.exception("Failed to update response_meta usage after streaming")
 
@@ -851,7 +892,32 @@ async def generate_chat_completion(
 
     payload = {**form_data}
     metadata = payload.pop("metadata", None)
+    log.info(
+    f"AUDIT META DEBUG: metadata keys="
+    f"{list(metadata.keys()) if isinstance(metadata, dict) else metadata}"
+    )
+    file_audit_response_meta_id = None
+    file_id = None
 
+    try:
+        files_meta = metadata.get("files") if isinstance(metadata, dict) else None
+        if isinstance(files_meta, list) and files_meta:
+            f0 = files_meta[0]
+            if isinstance(f0, dict):
+                # разные варианты ключей
+                file_id = f0.get("id") or f0.get("file_id") or f0.get("fileId") or f0.get("uuid")
+            elif isinstance(f0, str):
+                file_id = f0
+
+        if file_id:
+            f = Files.get_file_by_id(file_id)
+            if f and isinstance(getattr(f, "data", None), dict):
+                file_audit_response_meta_id = f.data.get("file_audit_response_meta_id")
+
+        log.info(f"AUDIT FILE LINK: file_id={file_id} file_audit_meta_id={file_audit_response_meta_id}")
+    except Exception:
+        log.exception("AUDIT FILE LINK: failed to resolve file_audit_response_meta_id from metadata['files']")
+    
     conversation_id = None
     if isinstance(metadata, dict):
         conversation_id = metadata.get("chat_id") or metadata.get("conversation_id")
@@ -1000,7 +1066,9 @@ async def generate_chat_completion(
             # ВАЖНО: создаём запись response_meta ДО return, чтобы был response_meta_id
             response_meta_id = None
             try:
+                print("Test", "sanitize_res:", sanitize_res, "sanitize_res.is_user_input", sanitize_res.is_user_input)
                 if sanitize_res and sanitize_res.is_user_input:
+                    
                     response_meta_id = insert_audit_rows(
                         response_meta=LLMResponseMeta(
                             user_id=user.id if user else None,
@@ -1034,7 +1102,7 @@ async def generate_chat_completion(
                         policy_id=sanitize_res.policy_id,
                         detector_version=sanitize_res.detector_version,
                     )
-                audit_inserted = True
+                    audit_inserted = True
             except Exception:
                 log.exception("Failed to insert response_meta before streaming")
 
@@ -1048,6 +1116,10 @@ async def generate_chat_completion(
                     session=session,
                     response_meta_id=response_meta_id,
                     capture=capture,
+                    file_response_meta_id=file_audit_response_meta_id,
+                    llm_provider="openai",                                
+                    llm_model=model_id,
+                    start_ts=start_ts,                                   
                 ),
             )
         else:
@@ -1062,6 +1134,69 @@ async def generate_chat_completion(
                     return JSONResponse(status_code=r.status, content=response)
                 else:
                     return PlainTextResponse(status_code=r.status, content=response)
+            response_meta_id = None
+        if (not audit_inserted) and sanitize_res and sanitize_res.is_user_input:
+            try:
+                latency_ms = int((time.perf_counter() - start_ts) * 1000)
+                upstream_headers = dict(r.headers) if r else {}
+                upstream_id = (
+                    upstream_headers.get("x-request-id")
+                    or upstream_headers.get("request-id")
+                )
+
+                meta_obj = {
+                    "extra": {
+                        "stream": False,
+                        "azure": bool(api_config.get("azure", False)),
+                        "request_url": request_url,
+                    },
+                    "headers": upstream_headers,
+                    "user_name": user.name if user else None,
+                    "user_email": user.email if user else None,
+                    "user_role": user.role if user else None,
+                }
+
+                response_meta_id = insert_audit_rows(
+                    response_meta=LLMResponseMeta(
+                        user_id=user.id if user else None,
+                        session_id=None,
+                        conversation_id=conversation_id,
+                        message_id=None,
+                        provider="openai",
+                        model=model_id,
+                        request_id=req_id,
+                        upstream_id=upstream_id,
+                        prompt_tokens=None,
+                        completion_tokens=None,
+                        total_tokens=None,
+                        latency_ms=latency_ms,
+                        cost_usd=None,
+                        meta_json=meta_obj,
+                    ),
+                    raw_text=sanitize_res.raw_text,
+                    masked_text=sanitize_res.masked_text,
+                    has_pii=int(sanitize_res.has_pii),
+                    policy_id=sanitize_res.policy_id,
+                    detector_version=sanitize_res.detector_version,
+                )
+                audit_inserted = True
+            except Exception:
+                log.exception("Failed to insert audit rows (non-stream)")
+
+        # ✅ UPDATE USAGE (если есть)
+        usage = response.get("usage") if isinstance(response, dict) else None
+        if response_meta_id and usage:
+            try:
+                update_response_meta_usage(
+                    response_meta_id=response_meta_id,
+                    prompt_tokens=usage.get("prompt_tokens"),
+                    completion_tokens=usage.get("completion_tokens"),
+                    total_tokens=usage.get("total_tokens"),
+                    cost_usd=None,  # подставь если считаешь cost
+                    usage_details=usage,
+                )
+            except Exception:
+                log.exception("Failed to update response_meta usage (non-stream)")
 
             return response
     except Exception as e:
@@ -1091,30 +1226,30 @@ async def generate_chat_completion(
                 "user_email": user.email if user else None,
                 "user_role": user.role if user else None,
             }
-            if (not audit_inserted) and  sanitize_res and sanitize_res.is_user_input:
-                insert_audit_rows(
-                    response_meta=LLMResponseMeta(
-                        user_id=user.id if user else None,
-                        session_id=None,
-                        conversation_id=conversation_id,
-                        message_id=None,
-                        provider="openai",
-                        model=model_id,
-                        request_id=req_id,
-                        upstream_id=upstream_id,
-                        prompt_tokens=None,
-                        completion_tokens=None,
-                        total_tokens=None,
-                        latency_ms=latency_ms,
-                        cost_usd=None,
-                        meta_json=meta_obj,
-                    ),
-                    raw_text=sanitize_res.raw_text if sanitize_res else None,
-                    masked_text=sanitize_res.masked_text if sanitize_res else None,
-                    has_pii=int(sanitize_res.has_pii) if sanitize_res else 0,
-                    policy_id=sanitize_res.policy_id if sanitize_res else None,
-                    detector_version=sanitize_res.detector_version if sanitize_res else None,
-                )
+            # if (not audit_inserted) and  sanitize_res and sanitize_res.is_user_input:
+            #     insert_audit_rows(
+            #         response_meta=LLMResponseMeta(
+            #             user_id=user.id if user else None,
+            #             session_id=None,
+            #             conversation_id=conversation_id,
+            #             message_id=None,
+            #             provider="openai",
+            #             model=model_id,
+            #             request_id=req_id,
+            #             upstream_id=upstream_id,
+            #             prompt_tokens=None,
+            #             completion_tokens=None,
+            #             total_tokens=None,
+            #             latency_ms=latency_ms,
+            #             cost_usd=None,
+            #             meta_json=meta_obj,
+            #         ),
+            #         raw_text=sanitize_res.raw_text if sanitize_res else None,
+            #         masked_text=sanitize_res.masked_text if sanitize_res else None,
+            #         has_pii=int(sanitize_res.has_pii) if sanitize_res else 0,
+            #         policy_id=sanitize_res.policy_id if sanitize_res else None,
+            #         detector_version=sanitize_res.detector_version if sanitize_res else None,
+            #     )
         except Exception:
             log.exception("Failed to save audit rows")
         if not streaming:
@@ -1174,8 +1309,7 @@ async def embeddings(request: Request, form_data: dict, user):
                 status_code=r.status,
                 headers=dict(r.headers),
                 background=BackgroundTask(
-                    cleanup_response, response=r, session=session,response_meta_id=response_meta_id,
-    capture=capture
+                    cleanup_response, response=r, session=session
                 ),
             )
         else:

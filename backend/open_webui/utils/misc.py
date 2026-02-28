@@ -599,7 +599,6 @@ def stream_chunks_handler(stream: aiohttp.StreamReader, capture: Optional["Strea
     if max_buffer_size is None or max_buffer_size <= 0:
         max_buffer_size = 10**9
     def _maybe_capture_usage_from_bytes(b: bytes) -> None:
-        print("AUDIT STREAM: View_may")
         if capture is None or not b:
             return
 
