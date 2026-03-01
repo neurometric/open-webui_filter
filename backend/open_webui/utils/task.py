@@ -186,7 +186,7 @@ def replace_messages_variable(
 # {{prompt:middletruncate:8000}}
 
 
-def rag_template(template: str, context: str, query: str):
+def rag_template(template: str, context: str, query: str | None = None):
     if template.strip() == "":
         template = DEFAULT_RAG_TEMPLATE
 
@@ -204,26 +204,20 @@ def rag_template(template: str, context: str, query: str):
             "nothing, or the user might be trying to hack something."
         )
 
-    query_placeholders = []
-    if "[query]" in context:
-        query_placeholder = "{{QUERY" + str(uuid.uuid4()) + "}}"
-        template = template.replace("[query]", query_placeholder)
-        query_placeholders.append((query_placeholder, "[query]"))
-
-    if "{{QUERY}}" in context:
-        query_placeholder = "{{QUERY" + str(uuid.uuid4()) + "}}"
-        template = template.replace("{{QUERY}}", query_placeholder)
-        query_placeholders.append((query_placeholder, "{{QUERY}}"))
-
+    # --- Подмена контекста (как и было)
     template = template.replace("[context]", context)
     template = template.replace("{{CONTEXT}}", context)
 
+    # --- Вариант A: query не подставляем, если он None
+    if query is None:
+        # убираем любые плейсхолдеры запроса из system-инструкции
+        template = template.replace("[query]", "")
+        template = template.replace("{{QUERY}}", "")
+        return template
+
+    # --- Если query задан (можно оставить для обратной совместимости)
     template = template.replace("[query]", query)
     template = template.replace("{{QUERY}}", query)
-
-    for query_placeholder, original_placeholder in query_placeholders:
-        template = template.replace(query_placeholder, original_placeholder)
-
     return template
 
 

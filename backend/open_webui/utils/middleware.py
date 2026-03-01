@@ -1540,16 +1540,22 @@ async def process_chat_payload(request, form_data, user, metadata, model):
         if prompt is None:
             raise Exception("No user message found")
 
-        if context_string != "":
-            form_data["messages"] = add_or_update_user_message(
-                rag_template(
+        if context_string:
+            form_data["messages"].append({
+                "role": "system",
+                "content": rag_template(
                     request.app.state.config.RAG_TEMPLATE,
                     context_string,
-                    prompt,
+                    query=None,  # <--- важно
                 ),
-                form_data["messages"],
-                append=False,
-            )
+                "_is_background_prompt": True,
+                "_origin": "rag",
+            })
+        if form_data["messages"]:
+            last_msg = form_data["messages"][-1]
+            if isinstance(last_msg, dict):
+                last_msg["_is_background_prompt"] = True
+                last_msg["_origin"] = "rag"
 
     # If there are citations, add them to the data_items
     sources = [
