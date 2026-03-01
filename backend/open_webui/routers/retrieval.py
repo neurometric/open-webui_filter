@@ -4,6 +4,8 @@ import mimetypes
 import os
 import shutil
 import asyncio
+import os
+import httpx
 
 import re
 import uuid
@@ -86,6 +88,11 @@ from open_webui.utils.misc import (
     calculate_sha256_string,
 )
 from open_webui.utils.auth import get_admin_user, get_verified_user
+from open_webui.utils.llm_audit import (
+    LLMResponseMeta,
+    insert_audit_rows,
+    sanitize_text_for_audit_sync,
+)
 
 from open_webui.config import (
     ENV,
@@ -118,7 +125,54 @@ log.setLevel(SRC_LOG_LEVELS["RAG"])
 # Utility functions
 #
 ##########################################
-
+def audit_one_file(
+    *,
+    user,
+    file,
+    source: str,
+    raw_text: str,
+    masked_text: str,
+    has_pii: int,
+    policy_id: str | None,
+    detector_version: str | None,
+) -> Optional[str]:
+    rm = LLMResponseMeta(
+        user_id=user.id,
+        session_id=None,
+        conversation_id=None,
+        message_id=None,
+        provider="file_processing",
+        model=None,
+        request_id=None,
+        upstream_id=None,
+        prompt_tokens=None,
+        completion_tokens=None,
+        total_tokens=None,
+        latency_ms=None,
+        cost_usd=None,
+        meta_json={
+            "user_name": getattr(user, "name", None),
+            "user_email": getattr(user, "email", None),
+            "user_role": getattr(user, "role", None),
+            "source": source,
+            "file_id": file.id,
+            "filename": file.filename,
+            "content_type": (file.meta or {}).get("content_type"),
+        },
+    )
+    response_meta_id = insert_audit_rows(
+        response_meta=rm,
+        raw_text=raw_text,
+        masked_text=masked_text,
+        has_pii=has_pii,
+        policy_id=policy_id,
+        detector_version=detector_version,
+    )
+    try:
+        Files.update_file_data_by_id(file.id, {"file_audit_response_meta_id": response_meta_id})
+    except Exception:
+        log.exception("AUDIT FILE: failed to save file_audit_response_meta_id into Files.data")
+    return response_meta_id
 
 def get_ef(
     engine: str,
@@ -1477,9 +1531,26 @@ def process_file(
                     # Audio file upload pipeline
                     pass
 
+                raw_text = form_data.content.replace("<br/>", "\n")
+                masked_text, has_pii, policy_id, detector_version = sanitize_text_for_audit_sync(raw_text)
+
+                try:
+                    audit_one_file(
+                        user=user,
+                        file=file,
+                        source="process_file:form_content",
+                        raw_text=raw_text,
+                        masked_text=masked_text,
+                        has_pii=has_pii,
+                        policy_id=policy_id,
+                        detector_version=detector_version,
+                    )
+                except Exception:
+                    log.exception("AUDIT: failed to insert audit rows (form_content)")
+
                 docs = [
                     Document(
-                        page_content=form_data.content.replace("<br/>", "\n"),
+                        page_content=masked_text,
                         metadata={
                             **file.meta,
                             "name": file.filename,
@@ -1490,7 +1561,7 @@ def process_file(
                     )
                 ]
 
-                text_content = form_data.content
+                text_content = masked_text
             elif form_data.collection_name:
                 # Check if the file has already been processed and save the content
                 # Usage: /knowledge/{id}/file/add, /knowledge/{id}/file/update
@@ -1576,6 +1647,38 @@ def process_file(
                         )
                         for doc in docs
                     ]
+                    raw_text = " ".join([d.page_content for d in docs])
+
+                    masked_text, has_pii, policy_id, detector_version = sanitize_text_for_audit_sync(raw_text)
+
+                    try:
+                        audit_one_file(
+                            user=user,
+                            file=file,
+                            source="process_file:loader",
+                            raw_text=raw_text,
+                            masked_text=masked_text,
+                            has_pii=has_pii,
+                            policy_id=policy_id,
+                            detector_version=detector_version,
+                        )
+                    except Exception:
+                        log.exception("AUDIT: failed to insert audit rows (loader)")
+
+                    docs = [
+                        Document(
+                            page_content=masked_text,
+                            metadata={
+                                **file.meta,
+                                "name": file.filename,
+                                "created_by": file.user_id,
+                                "file_id": file.id,
+                                "source": file.filename,
+                            },
+                        )
+                    ]
+
+                    # дальше у тебя уже:
                 else:
                     docs = [
                         Document(
