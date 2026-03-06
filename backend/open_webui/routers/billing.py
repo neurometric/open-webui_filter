@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 from sqlalchemy import text, bindparam
 
-from open_webui.env import SRC_LOG_LEVELS
+from open_webui.env import SRC_LOG_LEVELS, TOTAL_BUDGET_USD
 from open_webui.utils.auth import get_verified_user
 from open_webui.internal.db import Session
 
@@ -40,6 +40,10 @@ class BillingOptions(BaseModel):
 
 class BillingSummary(BaseModel):
     totalCostUsd: float = 0.0
+    totalBudgetUsd: Optional[float] = None
+    spentUsd: Optional[float] = None
+    remainingUsd: Optional[float] = None
+    spentPercent: Optional[float] = None
 
 def _safe_list(values: Optional[List[str]]) -> List[str]:
     if not values:
@@ -432,6 +436,11 @@ async def export_billing_csv(
     response_model=BillingSummary,
     summary="Get billing summary (total cost) from response_meta with filters applied",
 )
+@router.get(
+    "/billing/summary",
+    response_model=BillingSummary,
+    summary="Get billing summary (budget/spent/remaining) from response_meta with filters applied",
+)
 async def get_billing_summary(
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
@@ -456,11 +465,27 @@ async def get_billing_summary(
             stmt = stmt.bindparams(bindparam("user_names", expanding=True))
 
         row = Session.execute(stmt, params).mappings().first()
-        total_cost = float(row.get("total_cost_usd") or 0)
+        total_cost_usd = float(row.get("total_cost_usd") or 0.0)
 
-        return BillingSummary(totalCostUsd=total_cost)
+        total_budget_usd = float(TOTAL_BUDGET_USD)
+        spent_usd = total_cost_usd
+        remaining_usd = total_budget_usd - spent_usd
+        spent_percent = (spent_usd / total_budget_usd * 100.0) if total_budget_usd > 0 else 0.0
+
+        return BillingSummary(
+            totalCostUsd=round(total_cost_usd, 6),
+            totalBudgetUsd=round(total_budget_usd, 2),
+            spentUsd=round(spent_usd, 6),
+            remainingUsd=round(remaining_usd, 6),
+            spentPercent=round(spent_percent, 2),
+        )
 
     except Exception as e:
         log.exception("Failed to load billing summary from DB: %s", e)
-        return BillingSummary(totalCostUsd=0.0)
-
+        return BillingSummary(
+            totalCostUsd=0.0,
+            totalBudgetUsd=round(float(TOTAL_BUDGET_USD), 2),
+            spentUsd=0.0,
+            remainingUsd=round(float(TOTAL_BUDGET_USD), 2),
+            spentPercent=0.0,
+        )

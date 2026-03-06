@@ -112,6 +112,7 @@ for source in log_sources:
 
 log.setLevel(SRC_LOG_LEVELS["CONFIG"])
 
+TOTAL_BUDGET_USD = os.environ.get("TOTAL_BUDGET_USD") or os.environ.get("TOTAL_BUDGET_USD", "1")
 # Меняем последнее значение на нужное название
 WEBUI_NAME = os.environ.get("APP_NAME") or os.environ.get("AIGate", "AIGate")
 

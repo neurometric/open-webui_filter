@@ -20,8 +20,14 @@
     models: string[];
     userNames: string[];
   };
-  type BillingSummary = { totalCostUsd: number };
-  
+ type BillingSummary = {
+  totalCostUsd?: number;
+  totalBudgetUsd?: number | null;
+  spentUsd?: number | null;
+  remainingUsd?: number | null;
+  spentPercent?: number | null;
+};
+
   type SortKey = '' | 'promptTokens' | 'completionTokens' | 'totalTokens' | 'costUsd' | 'speed';
   type SortDir = '' | 'asc' | 'desc';
 
@@ -32,8 +38,12 @@
   const pageSize = 10;
   let isLastPage = false;
 
-  // Summary cost
+  // Summary
   let totalCostUsd: number | null = null;
+  let totalBudgetUsd: number | null = null;
+  let spentUsd: number | null = null;
+  let remainingUsd: number | null = null;
+  let spentPercent: number | null = null;
 
   // Filters
   let dateFrom = '';
@@ -170,7 +180,7 @@
     }
   };
   
-  const loadSummary = async () => {
+const loadSummary = async () => {
   try {
     const params = new URLSearchParams();
 
@@ -190,21 +200,34 @@
         Accept: 'application/json',
         'Content-Type': 'application/json',
         ...(localStorage.token && { Authorization: `Bearer ${localStorage.token}` })
-       }
-     });
+      }
+    });
 
-     if (!res.ok) {
-       totalCostUsd = null;
-       return;
-     }
+    if (!res.ok) {
+      totalCostUsd = null;
+      totalBudgetUsd = null;
+      spentUsd = null;
+      remainingUsd = null;
+      spentPercent = null;
+      return;
+    }
 
-     const data = (await res.json()) as BillingSummary;
-     totalCostUsd = typeof data?.totalCostUsd === 'number' ? data.totalCostUsd : 0;
-   } catch (e) {
-     console.error(e);
-     totalCostUsd = null;
-   }
- };
+    const data = (await res.json()) as BillingSummary;
+
+    totalCostUsd = typeof data?.totalCostUsd === 'number' ? data.totalCostUsd : 0;
+    totalBudgetUsd = typeof data?.totalBudgetUsd === 'number' ? data.totalBudgetUsd : null;
+    spentUsd = typeof data?.spentUsd === 'number' ? data.spentUsd : null;
+    remainingUsd = typeof data?.remainingUsd === 'number' ? data.remainingUsd : null;
+    spentPercent = typeof data?.spentPercent === 'number' ? data.spentPercent : null;
+  } catch (e) {
+    console.error(e);
+    totalCostUsd = null;
+    totalBudgetUsd = null;
+    spentUsd = null;
+    remainingUsd = null;
+    spentPercent = null;
+  }
+};
 
   const loadPage = async (targetPage: number) => {
     loading = true;
@@ -258,8 +281,16 @@ isLastPage = items.length < pageSize;
 if (sumRes.ok) {
   const s = (await sumRes.json()) as BillingSummary;
   totalCostUsd = typeof s?.totalCostUsd === 'number' ? s.totalCostUsd : 0;
+  totalBudgetUsd = typeof s?.totalBudgetUsd === 'number' ? s.totalBudgetUsd : null;
+  spentUsd = typeof s?.spentUsd === 'number' ? s.spentUsd : null;
+  remainingUsd = typeof s?.remainingUsd === 'number' ? s.remainingUsd : null;
+  spentPercent = typeof s?.spentPercent === 'number' ? s.spentPercent : null;
 } else {
   totalCostUsd = null;
+  totalBudgetUsd = null;
+  spentUsd = null;
+  remainingUsd = null;
+  spentPercent = null;
 }
     } catch (e: unknown) {
       console.error(e);
@@ -625,15 +656,43 @@ if (sumRes.ok) {
     <div class="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 mb-2">
       <div>Страница {page}</div>
       <div class="inline-flex gap-2">
-        <div
-           class="px-3 py-1 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200"
-           title="Сумма по всем строкам с учетом фильтров (не только текущая страница)" >
-           <span class="font-medium">Итоговая стоимость:</span>
-           {#if totalCostUsd == null}
-             <span class="ml-1 text-gray-400 dark:text-gray-500">—</span>
-           {:else}
-             <span class="ml-1 tabular-nums">${totalCostUsd.toFixed(6)}</span>
-           {/if}
+       <div
+          class="px-3 py-1 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200"
+          title="Сводка по бюджету с учетом текущих фильтров"
+        >
+          <div class="flex flex-wrap items-center gap-3">
+            <div>
+              <span class="font-medium">Общий бюджет:</span>
+              {#if totalBudgetUsd == null}
+                <span class="ml-1 text-gray-400 dark:text-gray-500">—</span>
+              {:else}
+                <span class="ml-1 tabular-nums">${totalBudgetUsd.toFixed(2)}</span>
+              {/if}
+            </div>
+
+            <div>
+              <span class="font-medium">Израсходовано:</span>
+              {#if spentUsd == null}
+                <span class="ml-1 text-gray-400 dark:text-gray-500">—</span>
+              {:else}
+                <span class="ml-1 tabular-nums">
+                  ${spentUsd.toFixed(6)}
+                  {#if spentPercent != null}
+                    <span class="text-gray-500 dark:text-gray-400">({spentPercent.toFixed(1)}%)</span>
+                  {/if}
+                </span>
+              {/if}
+            </div>
+
+            <div>
+              <span class="font-medium">Остаток:</span>
+              {#if remainingUsd == null}
+                <span class="ml-1 text-gray-400 dark:text-gray-500">—</span>
+              {:else}
+                <span class="ml-1 tabular-nums">${remainingUsd.toFixed(6)}</span>
+              {/if}
+            </div>
+          </div>
         </div>
         <button
           class="px-2 py-1 rounded border border-gray-200 dark:border-gray-700 disabled:opacity-40 disabled:cursor-default hover:bg-gray-50 dark:hover:bg-gray-800"
