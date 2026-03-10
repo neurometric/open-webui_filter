@@ -331,7 +331,7 @@
 	"Content Extraction Engine": "Механизм извлечения контента",
 	"Continue Response": "Продолжить ответ",
 	"Continue with {{provider}}": "Продолжить с {{provider}}",
-	"Continue with Email": "Продолжить с Email",
+	"Continue with Email": "Продолжить без Email",
 	"Continue with LDAP": "Продолжить с LDAP",
 	"Control how message text is split for TTS requests. 'Punctuation' splits into sentences, 'paragraphs' splits into paragraphs, and 'none' keeps the message as a single string.": "Управляйте разделением текста сообщения для запросов TTS. 'Пунктуация' разделяет на предложения, 'абзацы' - разделяет на абзацы, а 'нет' сохраняет сообщение в виде одной строки.",
 	"Control the repetition of token sequences in the generated text. A higher value (e.g., 1.5) will penalize repetitions more strongly, while a lower value (e.g., 1.1) will be more lenient. At 1, it is disabled.": "Контролируйте повторение последовательностей символов в сгенерированном тексте. Более высокое значение (например, 1.5) будет более строгим наказанием за повторения, в то время как более низкое значение (например, 1.1) будет более мягким. При значении 1 оно отключено.",
