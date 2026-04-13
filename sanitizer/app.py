@@ -20,6 +20,29 @@ class SanitizeResp(BaseModel):
     policy_id: str
     detector_version: str
 
+def _split_text(text: str, chunk_size: int = 1500, overlap: int = 200) -> List[Tuple[int, str]]:
+    """
+    Returns list of (global_start_offset, chunk_text)
+    """
+    if not text:
+        return []
+
+    chunks = []
+    start = 0
+    n = len(text)
+
+    while start < n:
+        end = min(start + chunk_size, n)
+        chunk = text[start:end]
+        chunks.append((start, chunk))
+
+        if end >= n:
+            break
+
+        start = max(end - overlap, start + 1)
+
+    return chunks
+
 
 # ---------------- ENV config ----------------
 
@@ -33,7 +56,7 @@ NER_TIMEOUT_MS = int(os.getenv("NER_TIMEOUT_MS", "2000"))
 NER_MIN_SCORE = float(os.getenv("NER_MIN_SCORE", "0.65"))
 NER_LABELS = {
     x.strip().upper()
-    for x in os.getenv("NER_LABELS", "PER,ORG,LOC,FIRST_NAME,LAST_NAME,MIDDLE_NAME").split(",")
+    for x in os.getenv("NER_LABELS", "NER_LABELS=PER,ORG,LOC,FIRST_NAME,LAST_NAME,MIDDLE_NAME,COUNTRY,REGION,CITY,DISTRICT,STREET,HOUSE").split(",")
     if x.strip()
 }
 logging.info(NER_LABELS)
@@ -121,6 +144,34 @@ def _apply_regex(text: str, policy_id: str) -> Tuple[str, int]:
 
 
 # ---------------- NER call + masking ----------------
+
+async def _call_ner_chunked(text: str) -> Tuple[List[Dict[str, Any]], Optional[str]]:
+    if not (NER_ENABLED and NER_URL):
+        return [], None
+
+    all_entities: List[Dict[str, Any]] = []
+    model_info = None
+
+    chunks = _split_text(text, chunk_size=1500, overlap=200)
+
+    for chunk_start, chunk_text in chunks:
+        entities, chunk_model_info = await _call_ner(chunk_text)
+        if chunk_model_info and not model_info:
+            model_info = chunk_model_info
+
+        for ent in entities:
+            try:
+                start = int(ent.get("start"))
+                end = int(ent.get("end"))
+            except Exception:
+                continue
+
+            ent = dict(ent)
+            ent["start"] = start + chunk_start
+            ent["end"] = end + chunk_start
+            all_entities.append(ent)
+
+    return all_entities, model_info
 
 async def _call_ner(text: str) -> Tuple[List[Dict[str, Any]], Optional[str]]:
     """
@@ -220,7 +271,7 @@ async def sanitize(req: SanitizeReq):
     ner_model_info = None
     if NER_ENABLED and NER_URL:
         try:
-            entities, ner_model_info = await _call_ner(masked)
+            entities, ner_model_info = await _call_ner_chunked(masked)
             masked2, ner_found = _mask_ner_entities(masked, entities)
             masked = masked2
             has_pii = 1 if (has_pii or ner_found) else 0

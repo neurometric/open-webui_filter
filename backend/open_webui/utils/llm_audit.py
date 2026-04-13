@@ -182,10 +182,10 @@ async def sanitize_payload_last_user_message(payload: dict) -> SanitizeResult:
         has_pii = 0
 
     # Truncate extremely large inputs for DB safety (optional)
-    if isinstance(raw_text, str) and len(raw_text) > 50_000:
-        raw_text = raw_text[:50_000] + "...TRUNCATED"
-    if isinstance(masked_text, str) and len(masked_text) > 50_000:
-        masked_text = masked_text[:50_000] + "...TRUNCATED"
+    if isinstance(raw_text, str) and len(raw_text) > 100_000:
+        raw_text = raw_text[:100_000] + "...TRUNCATED"
+    if isinstance(masked_text, str) and len(masked_text) > 100_000:
+        masked_text = masked_text[:100_000] + "...TRUNCATED"
     print("AUDIT: extract idx=", idx, "raw_text_type=", type(raw_text), "raw_text_preview=", (raw_text[:80] if isinstance(raw_text, str) else raw_text))
     return SanitizeResult(
         raw_text=raw_text,
@@ -229,10 +229,10 @@ def sanitize_text_for_audit_sync(text: str) -> tuple[str, int, str, Optional[str
             has_pii = 0
             detector_version = None
 
-    if len(raw_text) > 50_000:
-        raw_text = raw_text[:50_000] + "...TRUNCATED"
-    if isinstance(masked_text, str) and len(masked_text) > 50_000:
-        masked_text = masked_text[:50_000] + "...TRUNCATED"
+    if len(raw_text) > 100_000:
+        raw_text = raw_text[:100_000] + "...TRUNCATED"
+    if isinstance(masked_text, str) and len(masked_text) > 100_000:
+        masked_text = masked_text[:100_000] + "...TRUNCATED"
 
     return masked_text, (1 if has_pii else 0), policy_id, detector_version
 

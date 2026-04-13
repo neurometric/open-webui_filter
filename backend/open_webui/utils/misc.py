@@ -665,7 +665,7 @@ def stream_chunks_handler(stream: aiohttp.StreamReader, capture: Optional["Strea
             # If buffer itself already too big and not in skip_mode, enter skip_mode
             if not skip_mode and len(buffer) > max_buffer_size:
                 # Try to capture from the oversized buffer start (in case it contains usage)
-                _maybe_capture_usage_from_bytes(buffer[: min(len(buffer), 4096)])
+                _maybe_capture_usage_from_bytes(buffer[: min(len(buffer), 4096*2)])
 
                 skip_mode = True
                 log.info("Skip mode triggered, buffer size: %s", len(buffer))
