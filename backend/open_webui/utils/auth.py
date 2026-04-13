@@ -7,6 +7,8 @@ import hashlib
 import requests
 import os
 import bcrypt
+import secrets
+import string
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.asymmetric import ed25519
@@ -55,6 +57,14 @@ ALGORITHM = "HS256"
 # Auth Utils
 ##############
 
+def generate_unusable_password(length: int = 48) -> str:
+    """
+    Генерирует технический пароль для LDAP-only пользователей.
+    Длина <= 72 байт, чтобы не упираться в bcrypt-ограничение.
+    """
+    alphabet = string.ascii_letters + string.digits + "!@#$%^&*()-_=+"
+    password = "".join(secrets.choice(alphabet) for _ in range(length))
+    return password
 
 def verify_signature(payload: str, signature: str) -> bool:
     """

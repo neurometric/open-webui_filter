@@ -62,6 +62,7 @@ from open_webui.utils.auth import (
     get_current_user,
     get_password_hash,
     get_http_authorization_cred,
+    generate_unusable_password,
 )
 from open_webui.utils.webhook import post_webhook
 from open_webui.utils.access_control import get_permissions, has_permission
@@ -838,51 +839,68 @@ async def signout(request: Request, response: Response):
 async def add_user(
     request: Request, form_data: AddUserForm, user=Depends(get_admin_user)
 ):
-    if not validate_email_format(form_data.email.lower()):
+    email = form_data.email.lower().strip()
+
+    if not validate_email_format(email):
         raise HTTPException(
-            status.HTTP_400_BAD_REQUEST, detail=ERROR_MESSAGES.INVALID_EMAIL_FORMAT
+            status.HTTP_400_BAD_REQUEST,
+            detail=ERROR_MESSAGES.INVALID_EMAIL_FORMAT,
         )
 
-    if Users.get_user_by_email(form_data.email.lower()):
+    if Users.get_user_by_email(email):
         raise HTTPException(400, detail=ERROR_MESSAGES.EMAIL_TAKEN)
 
     try:
-        try:
-            validate_password(form_data.password)
-        except Exception as e:
-            raise HTTPException(400, detail=str(e))
+        raw_password = (form_data.password or "").strip()
 
-        hashed = get_password_hash(form_data.password)
-        user = Auths.insert_new_auth(
-            form_data.email.lower(),
+        if request.app.state.config.ENABLE_LDAP:
+            if not raw_password:
+                raw_password = generate_unusable_password()
+        else:
+            if not raw_password:
+                raise HTTPException(400, detail="Password is required")
+
+            try:
+                validate_password(raw_password)
+            except Exception as e:
+                raise HTTPException(400, detail=str(e))
+
+        hashed = get_password_hash(raw_password)
+
+        created_user = Auths.insert_new_auth(
+            email,
             hashed,
             form_data.name,
             form_data.profile_image_url,
             form_data.role,
         )
 
-        if user:
-            apply_default_group_assignment(
-                request.app.state.config.DEFAULT_GROUP_ID,
-                user.id,
-            )
-
-            token = create_token(data={"id": user.id})
-            return {
-                "token": token,
-                "token_type": "Bearer",
-                "id": user.id,
-                "email": user.email,
-                "name": user.name,
-                "role": user.role,
-                "profile_image_url": user.profile_image_url,
-            }
-        else:
+        if not created_user:
             raise HTTPException(500, detail=ERROR_MESSAGES.CREATE_USER_ERROR)
+
+        apply_default_group_assignment(
+            request.app.state.config.DEFAULT_GROUP_ID,
+            created_user.id,
+        )
+
+        token = create_token(data={"id": created_user.id})
+        return {
+            "token": token,
+            "token_type": "Bearer",
+            "id": created_user.id,
+            "email": created_user.email,
+            "name": created_user.name,
+            "role": created_user.role,
+            "profile_image_url": created_user.profile_image_url,
+        }
+
+    except HTTPException:
+        raise
     except Exception as err:
         log.error(f"Add user error: {str(err)}")
         raise HTTPException(
-            500, detail="An internal error occurred while adding the user."
+            500,
+            detail="An internal error occurred while adding the user.",
         )
 
 
