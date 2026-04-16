@@ -38,6 +38,15 @@
     quotaMode: QuotaMode;
   };
 
+  type GroupUserQuotaItem = {
+    userId: string;
+    name: string;
+    email?: string | null;
+    allocatedUsd?: number | null;
+    spentUsd: number;
+  };
+
+  
   let loading = true;
   let error: string | null = null;
 
@@ -72,6 +81,9 @@
   let editModalOpen = false;
   let editLoading = false;
   let selectedGroupQuota: QuotaMonitoringItem | null = null;
+
+  let usersQuota: GroupUserQuotaItem[] = [];
+  let usersQuotaLoading = false;
 
   function authHeaders() {
     return {
@@ -264,15 +276,21 @@
     if (page > 1) page -= 1;
   }
 
-  function openEditQuota(quota: QuotaMonitoringItem) {
+  async function openEditQuota(quota: QuotaMonitoringItem) {
     if (quota.scopeType !== 'group') return;
+
     selectedGroupQuota = quota;
+    usersQuota = [];
     editModalOpen = true;
+
+    await loadGroupUsersQuota(quota.scopeId);
   }
 
   function closeEditModal() {
     editModalOpen = false;
     selectedGroupQuota = null;
+    usersQuota = [];
+    usersQuotaLoading = false;
   }
 
   async function saveGroupQuota(event: CustomEvent<GroupQuotaPayload>) {
@@ -335,6 +353,31 @@
       document.removeEventListener('click', onDocClick, true);
     };
   });
+
+  async function loadGroupUsersQuota(groupId: string) {
+  usersQuotaLoading = true;
+
+  try {
+    const res = await fetch(`${WEBUI_BASE_URL}/api/quotas/groups/${groupId}/users`, {
+      method: 'GET',
+      headers: authHeaders()
+    });
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      const detail = body?.detail ?? 'Не удалось загрузить пользователей группы';
+      throw new Error(typeof detail === 'string' ? detail : 'Не удалось загрузить пользователей группы');
+    }
+
+    const data = (await res.json()) as GroupUserQuotaItem[];
+    usersQuota = Array.isArray(data) ? data : [];
+  } catch (e) {
+    console.error(e);
+    usersQuota = [];
+  } finally {
+    usersQuotaLoading = false;
+  }
+}
 </script>
 
 <div class="px-4.5 w-full mx-auto max-w-7xl py-4 space-y-3">
@@ -608,6 +651,8 @@
   open={editModalOpen}
   quota={selectedGroupQuota}
   loading={editLoading}
+  usersQuota={usersQuota}
+  usersQuotaLoading={usersQuotaLoading}
   on:close={closeEditModal}
   on:save={saveGroupQuota}
 />

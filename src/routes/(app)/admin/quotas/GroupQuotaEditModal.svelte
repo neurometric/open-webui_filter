@@ -18,14 +18,27 @@
     quotaMode: QuotaMode;
   };
 
+  type GroupUserQuotaItem = {
+    userId: string;
+    name: string;
+    email?: string | null;
+    allocatedUsd?: number | null;
+    spentUsd: number;
+  };
+
   export let open = false;
   export let quota: GroupQuotaItem | null = null;
   export let loading = false;
+
+  export let usersQuota: GroupUserQuotaItem[] = [];
+  export let usersQuotaLoading = false;
 
   const dispatch = createEventDispatcher<{
     close: void;
     save: SavePayload;
   }>();
+
+  let usersExpanded = false;
 
   let form: {
     quotaMode: QuotaMode;
@@ -36,6 +49,10 @@
     budgetUsd: null,
     isActive: true
   };
+
+  $: if (open) {
+    usersExpanded = false;
+  }
 
   $: if (open && quota) {
     form = {
@@ -54,9 +71,7 @@
     if (!quota) return;
 
     const normalizedBudget =
-      form.budgetUsd === null || form.budgetUsd === undefined
-        ? null
-        : Number(form.budgetUsd);
+      form.budgetUsd === null || form.budgetUsd === undefined ? null : Number(form.budgetUsd);
 
     if (normalizedBudget != null && (!Number.isFinite(normalizedBudget) || normalizedBudget < 0)) {
       alert('Введите корректную сумму');
@@ -98,7 +113,9 @@
       aria-modal="true"
       aria-labelledby="group-quota-modal-title"
     >
-      <div class="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-gray-800">
+      <div
+        class="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-gray-800"
+      >
         <div>
           <h2
             id="group-quota-modal-title"
@@ -130,6 +147,7 @@
           >
             Вид квотирования
           </label>
+
           <select
             id="quota-mode"
             bind:value={form.quotaMode}
@@ -144,9 +162,82 @@
             <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
               Общий бюджет группы будет делиться поровну между всеми пользователями группы.
             </p>
+
+            <div
+              class="mt-3 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden"
+            >
+              <button
+                type="button"
+                class="flex w-full items-center justify-between px-3 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-800/50"
+                on:click={() => (usersExpanded = !usersExpanded)}
+                disabled={loading}
+              >
+                <div>
+                  <div class="text-sm font-medium text-gray-800 dark:text-gray-200">
+                    Пользователи группы
+                  </div>
+                  <div class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                    Сначала показываются пользователи с наибольшими расходами
+                  </div>
+                </div>
+
+                <span class="text-sm text-gray-500 dark:text-gray-400">
+                  {#if usersExpanded}▲{:else}▼{/if}
+                </span>
+              </button>
+
+              {#if usersExpanded}
+                <div class="border-t border-gray-200 dark:border-gray-700 px-3 py-3">
+                  {#if usersQuotaLoading}
+                    <div class="text-sm text-gray-500 dark:text-gray-400">Загрузка…</div>
+                  {:else if usersQuota.length === 0}
+                    <div class="text-sm text-gray-500 dark:text-gray-400">Нет пользователей</div>
+                  {:else}
+                    <div class="space-y-2">
+                      <div
+                        class="grid grid-cols-[1fr_90px_110px] px-3 text-xs text-gray-500 dark:text-gray-400"
+                      >
+                        <div>Пользователь</div>
+                        <div class="text-right">Выделено</div>
+                        <div class="text-right">Потрачено</div>
+                      </div>
+
+                      {#each usersQuota as userItem}
+                        <div
+                          class="grid grid-cols-[1fr_90px_110px] items-center rounded-md bg-gray-50 dark:bg-gray-800/50 px-3 py-2 text-sm"
+                        >
+                          <div class="pr-3 min-w-0">
+                            <div class="font-medium text-gray-800 dark:text-gray-200 break-words">
+                              {userItem.name}
+                            </div>
+                            {#if userItem.email}
+                              <div class="text-xs text-gray-500 dark:text-gray-400 break-all">
+                                {userItem.email}
+                              </div>
+                            {/if}
+                          </div>
+
+                          <div class="text-right tabular-nums text-gray-700 dark:text-gray-300">
+                            {#if userItem.allocatedUsd != null}
+                              {userItem.allocatedUsd.toFixed(2)}
+                            {:else}
+                              —
+                            {/if}
+                          </div>
+
+                          <div class="text-right tabular-nums text-gray-700 dark:text-gray-300">
+                            {userItem.spentUsd.toFixed(6)}
+                          </div>
+                        </div>
+                      {/each}
+                    </div>
+                  {/if}
+                </div>
+              {/if}
+            </div>
           {:else}
             <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
-              Для группы будет использоваться единый уникальный лимит.
+              Для группы будет использоваться единый общий лимит.
             </p>
           {/if}
         </div>
@@ -158,6 +249,7 @@
           >
             Сколько выделяем денег, USD
           </label>
+
           <input
             id="budget-usd"
             bind:value={form.budgetUsd}
@@ -168,6 +260,7 @@
             class="w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-500"
             disabled={loading}
           />
+
           <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
             Оставь пустым, если лимит не задан.
           </p>
@@ -204,7 +297,9 @@
         </div>
       </div>
 
-      <div class="flex items-center justify-end gap-3 px-5 py-4 border-t border-gray-200 dark:border-gray-800">
+      <div
+        class="flex items-center justify-end gap-3 px-5 py-4 border-t border-gray-200 dark:border-gray-800"
+      >
         <button
           class="rounded-lg border border-gray-300 dark:border-gray-700 px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50"
           on:click={close}

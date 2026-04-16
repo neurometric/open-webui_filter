@@ -108,7 +108,8 @@
 	export let imageGenerationEnabled = false;
 	export let webSearchEnabled = false;
 	export let codeInterpreterEnabled = false;
-
+	export let disabled = false;
+	
 	let showInputVariablesModal = false;
 	let inputVariablesModalCallback = (variableValues) => {};
 	let inputVariables = {};

@@ -17,6 +17,7 @@
 
 	export let show = false;
 
+	let enableLdap = false;
 	let loading = false;
 	let tab = '';
 	let inputFiles;
@@ -29,14 +30,36 @@
 	};
 
 	$: if (show) {
-		_user = {
-			name: '',
-			email: '',
-			password: '',
-			role: 'user'
-		};
-	}
+	_user = {
+		name: '',
+		email: '',
+		password: '',
+		role: 'user'
+	};
 
+	loadLdapConfig();
+}
+	const loadLdapConfig = async () => {
+		try {
+			const res = await fetch(`${WEBUI_BASE_URL}/api/v1/auths/admin/config/ldap`, {
+				method: 'GET',
+				headers: {
+					Authorization: `Bearer ${localStorage.token}`,
+					'Content-Type': 'application/json'
+				}
+			});
+
+			if (!res.ok) {
+				return;
+			}
+
+			const data = await res.json();
+			enableLdap = !!data.ENABLE_LDAP;
+		} catch (e) {
+			console.error('Failed to load LDAP config', e);
+		}
+	};
+	
 	const submitHandler = async () => {
 		const stopLoading = () => {
 			dispatch('save');
@@ -46,11 +69,13 @@
 		if (tab === '') {
 			loading = true;
 
+			const password = enableLdap ? null : _user.password;
+
 			const res = await addUser(
 				localStorage.token,
 				_user.name,
 				_user.email,
-				_user.password,
+				password,
 				_user.role,
 				generateInitialsImage(_user.name)
 			).catch((error) => {
@@ -223,20 +248,28 @@
 								</div>
 							</div>
 
-							<div class="flex flex-col w-full mt-1">
-								<div class=" mb-1 text-xs text-gray-500">{$i18n.t('Password')}</div>
+							{#if !enableLdap}
+								<div class="flex flex-col w-full mt-1">
+									<div class=" mb-1 text-xs text-gray-500">{$i18n.t('Password')}</div>
 
-								<div class="flex-1">
-									<SensitiveInput
-										class="w-full text-sm bg-transparent disabled:text-gray-500 dark:disabled:text-gray-500 outline-hidden"
-										type="password"
-										bind:value={_user.password}
-										placeholder={$i18n.t('Enter Your Password')}
-										autocomplete="off"
-										required
-									/>
+									<div class="flex-1">
+										<SensitiveInput
+											class="w-full text-sm bg-transparent disabled:text-gray-500 dark:disabled:text-gray-500 outline-hidden"
+											type="password"
+											bind:value={_user.password}
+											placeholder={$i18n.t('Enter Your Password')}
+											autocomplete="off"
+											required={!enableLdap}
+										/>
+									</div>
 								</div>
-							</div>
+							{:else}
+								<div class="flex flex-col w-full mt-2 text-xs text-gray-500">
+									<div>
+										
+									</div>
+								</div>
+							{/if}
 						{:else if tab === 'import'}
 							<div>
 								<div class="mb-3 w-full">
