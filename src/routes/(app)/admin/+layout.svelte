@@ -100,7 +100,12 @@
 						: 'text-gray-300 dark:text-gray-600 hover:text-gray-700 dark:hover:text-white'} transition"
 					href="/admin/billing">Биллинг</a
 				>
-
+				<a
+					class="min-w-fit p-1.5 {$page.url.pathname.includes('/admin/quotas')
+						? ''
+						: 'text-gray-300 dark:text-gray-600 hover:text-gray-700 dark:hover:text-white'} transition"
+					href="/admin/quotas">Квотирование</a
+				>
 				<a
 					class="min-w-fit p-1.5 {$page.url.pathname.includes('/admin/settings')
 						? ''

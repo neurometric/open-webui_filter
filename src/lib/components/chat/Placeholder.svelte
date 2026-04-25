@@ -58,7 +58,7 @@
 	export let onChange = (e) => {};
 
 	export let toolServers = [];
-
+	export let disabled = false;
 	let models = [];
 	let selectedModelIdx = 0;
 

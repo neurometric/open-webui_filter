@@ -99,6 +99,23 @@
 
 	export let chatIdProp = '';
 
+	type ChatQuotaState = {
+	allowed: boolean;
+	quotaMode?: 'shared_evenly' | 'unique' | null;
+	percentUsed?: number | null;
+	spentUsd?: number | null;
+	limitUsd?: number | null;
+	remainingUsd?: number | null;
+	notifyLevel?: 85 | 90 | 95 | 100 | null;
+	message?: string | null;
+	};
+
+	let chatQuotaState: ChatQuotaState | null = null;
+	let quotaBannerText = '';
+	let quotaBlocked = false;
+	let quotaBannerDismissed = false;
+	let quotaBannerDismissedLevel: number | null = null;
+
 	let loading = true;
 
 	const eventTarget = new EventTarget();
@@ -163,11 +180,68 @@
 		navigateHandler();
 	}
 
+	async function checkChatQuota() {
+		try {
+			const res = await fetch(`${WEBUI_BASE_URL}/api/quotas/chat/check`, {
+				headers: {
+					Accept: 'application/json',
+					'Content-Type': 'application/json',
+					...(localStorage.token && { Authorization: `Bearer ${localStorage.token}` })
+				}
+			});
+
+			if (!res.ok) {
+				return null;
+			}
+
+			const data = (await res.json()) as ChatQuotaState;
+			chatQuotaState = data;
+			quotaBlocked = !data.allowed;
+
+			const currentLevel = data.notifyLevel ?? null;
+
+			if (!data.message || !currentLevel) {
+				quotaBannerText = '';
+				quotaBannerDismissed = false;
+				quotaBannerDismissedLevel = null;
+				return data;
+			}
+
+			if (quotaBannerDismissedLevel !== currentLevel) {
+				quotaBannerDismissed = false;
+				quotaBannerDismissedLevel = null;
+			}
+
+			if (!data.allowed) {
+				quotaBannerText = data.message;
+				quotaBannerDismissed = false;
+				quotaBannerDismissedLevel = null;
+				return data;
+			}
+
+			if (!quotaBannerDismissed) {
+				quotaBannerText = data.message;
+			} else {
+				quotaBannerText = '';
+			}
+
+			return data;
+		} catch (e) {
+			console.error('Failed to check chat quota', e);
+			return null;
+		}
+	}
 	const navigateHandler = async () => {
 		loading = true;
 
 		prompt = '';
 		messageInput?.setText('');
+
+		quotaBannerText = '';
+		quotaBannerDismissed = false;
+		quotaBannerDismissedLevel = null;
+		chatQuotaState = null;
+		quotaBlocked = false;
 
 		files = [];
 		selectedToolIds = [];
@@ -628,6 +702,7 @@
 			}
 		});
 
+		await checkChatQuota();
 		const chatInput = document.getElementById('chat-input');
 		chatInput?.focus();
 	});
@@ -1532,6 +1607,7 @@
 				message.id,
 				createMessagesList(history, message.id)
 			);
+			await checkChatQuota();
 		}
 
 		console.log(data);
@@ -1585,6 +1661,12 @@
 					maxCount: $config?.file?.max_count
 				})
 			);
+			return;
+		}
+
+		const quota = await checkChatQuota();
+		if (quota && !quota.allowed) {
+			toast.error(quota.message ?? 'Квота исчерпана. Отправка сообщений заблокирована.');
 			return;
 		}
 
@@ -2100,6 +2182,11 @@
 	};
 
 	const submitMessage = async (parentId, prompt) => {
+		const quota = await checkChatQuota();
+		if (quota && !quota.allowed) {
+			toast.error(quota.message ?? 'Квота исчерпана. Отправка сообщений заблокирована.');
+			return;
+		}
 		let userPrompt = prompt;
 		let userMessageId = uuidv4();
 
@@ -2501,9 +2588,32 @@
 									/>
 								</div>
 							</div>
+							{#if quotaBannerText}
+								<div class="mx-auto mb-2 w-full max-w-4xl px-4">
+									<div
+										class="flex items-start justify-between gap-3 rounded-lg border border-yellow-200 bg-yellow-50 px-3 py-2 text-sm text-yellow-800 dark:border-yellow-900 dark:bg-yellow-950/30 dark:text-yellow-300"
+									>
+										<div>{quotaBannerText}</div>
 
+										{#if chatQuotaState?.allowed}
+											<button
+												type="button"
+												class="shrink-0 text-xs opacity-70 hover:opacity-100"
+												on:click={() => {
+													quotaBannerDismissed = true;
+													quotaBannerDismissedLevel = chatQuotaState?.notifyLevel ?? null;
+													quotaBannerText = '';
+												}}
+											>
+												✕
+											</button>
+										{/if}
+									</div>
+								</div>
+							{/if}
 							<div class=" pb-2 z-10">
 								<MessageInput
+									disabled={quotaBlocked}
 									bind:this={messageInput}
 									{history}
 									{taskIds}
@@ -2555,8 +2665,34 @@
 								</div>
 							</div>
 						{:else}
-							<div class="flex items-center h-full">
+						<div class="flex items-center h-full w-full">
+							<div class="w-full">
+								{#if quotaBannerText}
+									<div class="mx-auto mb-4 w-full max-w-4xl px-4">
+										<div
+											class="flex items-start justify-between gap-3 rounded-lg border border-yellow-200 bg-yellow-50 px-3 py-2 text-sm text-yellow-800 dark:border-yellow-900 dark:bg-yellow-950/30 dark:text-yellow-300"
+										>
+											<div>{quotaBannerText}</div>
+
+											{#if chatQuotaState?.allowed}
+												<button
+													type="button"
+													class="shrink-0 text-xs opacity-70 hover:opacity-100"
+													on:click={() => {
+														quotaBannerDismissed = true;
+														quotaBannerDismissedLevel = chatQuotaState?.notifyLevel ?? null;
+														quotaBannerText = '';
+													}}
+												>
+													✕
+												</button>
+											{/if}
+										</div>
+									</div>
+								{/if}
+
 								<Placeholder
+									disabled={quotaBlocked}
 									{history}
 									{selectedModels}
 									bind:messageInput
@@ -2597,7 +2733,8 @@
 									}}
 								/>
 							</div>
-						{/if}
+						</div>
+					{/if}
 					</div>
 				</Pane>
 
