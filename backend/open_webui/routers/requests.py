@@ -100,7 +100,7 @@ async def get_requests(
             base_sql += " WHERE " + " AND ".join(conditions)
 
         base_sql += """
-            ORDER BY datetime(created_at) DESC
+            ORDER BY created_at DESC
             LIMIT :limit OFFSET :offset
         """
 
