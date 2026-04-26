@@ -75,7 +75,7 @@ def _build_where(
 
     safe_user_names = _safe_list(user_names)
     if safe_user_names:
-        where_clauses.append("json_extract(meta_json, '$.user_name') IN :user_names")
+        where_clauses.append("meta_json->>'user_name' IN :user_names")
         params["user_names"] = safe_user_names
 
     where_sql = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
@@ -110,7 +110,7 @@ def _build_where_for_options(
     if include_user_names:
         safe_user_names = _safe_list(user_names)
         if safe_user_names:
-            where_clauses.append("json_extract(meta_json, '$.user_name') IN :user_names")
+            where_clauses.append("meta_json->>'user_name' IN :user_names")
             params["user_names"] = safe_user_names
 
     where_sql = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
@@ -159,7 +159,7 @@ async def get_billing(
             "latency_ms": "latency_ms",
         }
 
-        order_sql = "ORDER BY datetime(created_at) DESC"
+        order_sql = "ORDER BY created_at DESC"
         if order_by and order_by in valid_order_fields:
             direction = "ASC" if order_dir == "asc" else "DESC"
             order_sql = f"ORDER BY {valid_order_fields[order_by]} {direction}"
@@ -276,11 +276,11 @@ async def get_billing_options(
         """
 
         q_users = f"""
-            SELECT DISTINCT json_extract(meta_json, '$.user_name') AS value
+            SELECT DISTINCT meta_json->>'user_name' AS value
             FROM response_meta
             {where_users_sql}
-            {"AND" if where_users_sql else "WHERE"} json_extract(meta_json, '$.user_name') IS NOT NULL
-              AND trim(json_extract(meta_json, '$.user_name')) != ''
+            {"AND" if where_users_sql else "WHERE"} meta_json->>'user_name' IS NOT NULL
+              AND trim(meta_json->>'user_name') != ''
             ORDER BY value ASC
         """
 
@@ -341,7 +341,7 @@ async def export_billing_csv(
             "latency_ms": "latency_ms",
         }
 
-        order_sql = "ORDER BY datetime(created_at) DESC"
+        order_sql = "ORDER BY created_at DESC"
         if order_by and order_by in valid_order_fields:
             direction = "ASC" if order_dir == "asc" else "DESC"
             order_sql = f"ORDER BY {valid_order_fields[order_by]} {direction}"
