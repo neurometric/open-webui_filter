@@ -31,7 +31,7 @@ def upgrade():
         sa.Column("budget_usd", sa.Float(), nullable=False),
 
         sa.Column("warning_percent", sa.Float(), nullable=False, server_default="80"),
-        sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.text("1")),
+        sa.Column("is_active", sa.Boolean(), server_default=sa.true(), nullable=False),
 
         sa.Column("period_type", sa.String(), nullable=False, server_default="monthly"),
 
