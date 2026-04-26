@@ -551,13 +551,12 @@ class SPAStaticFiles(StaticFiles):
 
 print(
     rf"""
- ██████╗ ██████╗ ███████╗███╗   ██╗    ██╗    ██╗███████╗██████╗ ██╗   ██╗██╗
-██╔═══██╗██╔══██╗██╔════╝████╗  ██║    ██║    ██║██╔════╝██╔══██╗██║   ██║██║
-██║   ██║██████╔╝█████╗  ██╔██╗ ██║    ██║ █╗ ██║█████╗  ██████╔╝██║   ██║██║
-██║   ██║██╔═══╝ ██╔══╝  ██║╚██╗██║    ██║███╗██║██╔══╝  ██╔══██╗██║   ██║██║
-╚██████╔╝██║     ███████╗██║ ╚████║    ╚███╔███╔╝███████╗██████╔╝╚██████╔╝██║
- ╚═════╝ ╚═╝     ╚══════╝╚═╝  ╚═══╝     ╚══╝╚══╝ ╚══════╝╚═════╝  ╚═════╝ ╚═╝
-
+ ██████╗  ██████╗ ███╗   ██╗ ██████╗ ███╗   ██╗ ██╗██████╗ 
+██╔════╝ ██╔═══██╗████╗  ██║██╔════╝ ████╗  ██║██║██╔══██╗
+██║  ███╗██║   ██║██╔██╗ ██║██║  ███╗██╔██╗ ██║██║██████╔╝
+██║   ██║██║   ██║██║╚██╗██║██║   ██║██║╚██╗██║██║██╔══██╗
+╚██████╔╝╚██████╔╝██║ ╚████║╚██████╔╝██║ ╚████║██║██║  ██║
+ ╚═════╝  ╚═════╝ ╚═╝  ╚═══╝ ╚═════╝ ╚═╝  ╚═══╝╚═╝╚═╝  ╚═╝
 
 v{VERSION} - building the best AI user interface.
 {f"Commit: {WEBUI_BUILD_HASH}" if WEBUI_BUILD_HASH != "dev-build" else ""}
@@ -580,8 +579,9 @@ async def lifespan(app: FastAPI):
     # This should be blocking (sync) so functions are not deactivated on first /get_models calls
     # when the first user lands on the / route.
     log.info("Installing external dependencies of functions and tools...")
-    install_tool_and_function_dependencies()
+    # install_tool_and_function_dependencies()
 
+    log.info("lifespan: before redis")
     app.state.redis = get_redis_connection(
         redis_url=REDIS_URL,
         redis_sentinels=get_sentinels_from_env(
@@ -591,6 +591,7 @@ async def lifespan(app: FastAPI):
         async_mode=True,
     )
 
+    log.info("redis_task_command_listener...")
     if app.state.redis is not None:
         app.state.redis_task_command_listener = asyncio.create_task(
             redis_task_command_listener(app)
@@ -599,7 +600,7 @@ async def lifespan(app: FastAPI):
     if THREAD_POOL_SIZE and THREAD_POOL_SIZE > 0:
         limiter = anyio.to_thread.current_default_thread_limiter()
         limiter.total_tokens = THREAD_POOL_SIZE
-
+    
     asyncio.create_task(periodic_usage_pool_cleanup())
 
     if app.state.config.ENABLE_BASE_MODELS_CACHE:
@@ -628,7 +629,7 @@ async def lifespan(app: FastAPI):
     if hasattr(app.state, "redis_task_command_listener"):
         app.state.redis_task_command_listener.cancel()
 
-
+log.info("Start app for WEB")
 app = FastAPI(
     title="Open WebUI",
     docs_url="/docs" if ENV == "dev" else None,
