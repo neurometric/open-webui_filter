@@ -1,32 +1,64 @@
 services:
-  ollama:
-    volumes:
-      - ollama:/root/.ollama
-    container_name: ollama
-    pull_policy: always
-    tty: true
+  postgres:
+    image: postgres:16
+    container_name: openwebui-postgres
     restart: unless-stopped
-    image: ollama/ollama:${OLLAMA_DOCKER_TAG-latest}
+    environment:
+      POSTGRES_DB: openwebui
+      POSTGRES_USER: openwebui
+      POSTGRES_PASSWORD: openwebui
+    ports:
+      - "8050:5432"
+    volumes:
+      - openwebui_postgres_data:/var/lib/postgresql/data
 
   open-webui:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: ghcr.io/open-webui/open-webui:${WEBUI_DOCKER_TAG-main}
+    image: openwebui:v1.0.0
     container_name: open-webui
+    depends_on:
+      - postgres
+      - sanitizer
+      - nlp-service
+    ports:
+      - "${PORT}:${PORT}"
     volumes:
       - open-webui:/app/backend/data
-    depends_on:
-      - ollama
-    ports:
-      - ${OPEN_WEBUI_PORT-3000}:8080
+    env_file:
+      - params.env
     environment:
-      - 'OLLAMA_BASE_URL=http://ollama:11434'
-      - 'WEBUI_SECRET_KEY='
-    extra_hosts:
-      - host.docker.internal:host-gateway
+      SANITIZER_URL: http://sanitizer:8080/v1/sanitize
+    restart: unless-stopped
+
+  sanitizer:
+    build:
+      context: ./sanitizer
+    image: sanitizer:latest  
+    container_name: sanitizer
+    environment:
+      NER_URL: "http://nlp-service:8000/ner"
+    ports:
+      - "2027:8080"
+    restart: unless-stopped
+
+  nlp-service:
+    build:
+      context: ./nlp-service
+    image: nlp-service:latest  
+    container_name: nlp-service
+    ports:
+      - "2028:8000"
+    volumes:
+      - hf_cache:/cache/huggingface
+      - torch_cache:/cache/torch
+    environment:
+      TRANSFORMERS_CACHE: /cache/huggingface
+      HF_HOME: /cache/huggingface
+      TORCH_HOME: /cache/torch
+      DEVICE: cpu
     restart: unless-stopped
 
 volumes:
-  ollama: {}
   open-webui: {}
+  openwebui_postgres_data: {}
+  hf_cache: {}
+  torch_cache: {}
