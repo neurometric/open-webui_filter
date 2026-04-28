@@ -1,3 +1,4 @@
+import os
 import logging
 from typing import List, Optional, Literal
 
@@ -14,7 +15,6 @@ log = logging.getLogger(__name__)
 log.setLevel(SRC_LOG_LEVELS["MAIN"])
 
 router = APIRouter()
-
 
 class QuotaSummary(BaseModel):
     totalBudgetUsd: Optional[float] = None
@@ -68,6 +68,26 @@ class GroupUserQuotaItem(BaseModel):
     email: Optional[str] = None
     allocatedUsd: Optional[float] = None
     spentUsd: float = 0.0
+
+
+COMPANY_QUOTA_BUDGET_USD = os.getenv("COMPANY_QUOTA_BUDGET_USD")
+COMPANY_QUOTA_WARNING_PERCENT = os.getenv("COMPANY_QUOTA_WARNING_PERCENT", "80")
+
+def _env_float(value: Optional[str], default: Optional[float] = None) -> Optional[float]:
+
+    if value is None or str(value).strip() == "":
+        return default
+    try:
+        return float(str(value).strip())
+
+    except ValueError:
+        return default
+
+def _get_company_budget_from_env() -> Optional[float]:
+    return _env_float(COMPANY_QUOTA_BUDGET_USD)
+
+def _get_company_warning_from_env() -> float:
+    return _env_float(COMPANY_QUOTA_WARNING_PERCENT, 80.0) or 80.0
 
 def _get_notify_level(percent_used: Optional[float]) -> Optional[int]:
     if percent_used is None:
@@ -288,7 +308,8 @@ async def get_quotas_summary(
         budget_usd = (
             float(quota_row.get("budget_usd"))
             if quota_row and quota_row.get("budget_usd") is not None
-            else None
+            else _get_company_budget_from_env()
+
         )
 
         where_sql, params = _build_where(date_from, date_to, alias="rm")
