@@ -2589,27 +2589,29 @@
 								</div>
 							</div>
 							{#if quotaBannerText}
-								<div class="mx-auto mb-2 w-full max-w-4xl px-4">
-									<div
-										class="flex items-start justify-between gap-3 rounded-lg border border-yellow-200 bg-yellow-50 px-3 py-2 text-sm text-yellow-800 dark:border-yellow-900 dark:bg-yellow-950/30 dark:text-yellow-300"
-									>
-										<div>{quotaBannerText}</div>
-
-										{#if chatQuotaState?.allowed}
-											<button
-												type="button"
-												class="shrink-0 text-xs opacity-70 hover:opacity-100"
-												on:click={() => {
-													quotaBannerDismissed = true;
-													quotaBannerDismissedLevel = chatQuotaState?.notifyLevel ?? null;
-													quotaBannerText = '';
-												}}
-											>
-												✕
-											</button>
-										{/if}
+								<div class="flex justify-center mb-2 w-full px-4">
+								<div
+									class="relative inline-flex items-center justify-center rounded-lg border border-yellow-200 bg-yellow-50 px-6 py-2.5 text-sm font-medium text-yellow-800 dark:border-yellow-900 dark:bg-yellow-950/30 dark:text-yellow-300"
+								>
+									<div class="text-center leading-5">
+										{quotaBannerText}
 									</div>
+									{#if chatQuotaState?.allowed}
+										<button
+											type="button"
+											class="absolute right-3 top-1/2 -translate-y-1/2 text-sm opacity-70 hover:opacity-100"
+											on:click={() => {
+												quotaBannerDismissed = true;
+												quotaBannerDismissedLevel = chatQuotaState?.notifyLevel ?? null;
+												quotaBannerText = '';
+											}}
+										>
+											✕
+										</button>
+									{/if}
 								</div>
+
+							</div>
 							{/if}
 							<div class=" pb-2 z-10">
 								<MessageInput
@@ -2668,29 +2670,29 @@
 						<div class="flex items-center h-full w-full">
 							<div class="w-full">
 								{#if quotaBannerText}
-									<div class="mx-auto mb-4 w-full max-w-4xl px-4">
-										<div
-											class="flex items-start justify-between gap-3 rounded-lg border border-yellow-200 bg-yellow-50 px-3 py-2 text-sm text-yellow-800 dark:border-yellow-900 dark:bg-yellow-950/30 dark:text-yellow-300"
-										>
-											<div>{quotaBannerText}</div>
-
-											{#if chatQuotaState?.allowed}
-												<button
-													type="button"
-													class="shrink-0 text-xs opacity-70 hover:opacity-100"
-													on:click={() => {
-														quotaBannerDismissed = true;
-														quotaBannerDismissedLevel = chatQuotaState?.notifyLevel ?? null;
-														quotaBannerText = '';
-													}}
-												>
-													✕
-												</button>
-											{/if}
+									<div class="flex justify-center mb-2 w-full px-4">
+									<div
+										class="relative inline-flex items-center justify-center rounded-lg border border-yellow-200 bg-yellow-50 px-6 py-2.5 text-sm font-medium text-yellow-800 dark:border-yellow-900 dark:bg-yellow-950/30 dark:text-yellow-300"
+									>
+										<div class="text-center leading-5">
+											{quotaBannerText}
 										</div>
+										{#if chatQuotaState?.allowed}
+											<button
+												type="button"
+												class="absolute right-3 top-1/2 -translate-y-1/2 text-sm opacity-70 hover:opacity-100"
+												on:click={() => {
+													quotaBannerDismissed = true;
+													quotaBannerDismissedLevel = chatQuotaState?.notifyLevel ?? null;
+													quotaBannerText = '';
+												}}
+											>
+												✕
+											</button>
+										{/if}
 									</div>
+								</div>
 								{/if}
-
 								<Placeholder
 									disabled={quotaBlocked}
 									{history}
