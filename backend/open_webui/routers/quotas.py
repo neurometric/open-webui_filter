@@ -89,6 +89,52 @@ def _get_company_budget_from_env() -> Optional[float]:
 def _get_company_warning_from_env() -> float:
     return _env_float(COMPANY_QUOTA_WARNING_PERCENT, 80.0) or 80.0
 
+def _ensure_company_quota_from_env() -> None:
+    budget = _get_company_budget_from_env()
+    warning = _get_company_warning_from_env()
+
+    if budget is None:
+        return
+
+    try:
+        Session.execute(
+            text("""
+                INSERT INTO quotas (
+                  scope_type,
+                  scope_id,
+                  scope_name,
+                  budget_usd,
+                  warning_percent,
+                  is_active,
+                  quota_mode
+                )
+                VALUES (
+                  'company',
+                  'company',
+                  'Вся компания',
+                  :budget_usd,
+                  :warning_percent,
+                  TRUE,
+                  'shared_evenly'
+                )
+                ON CONFLICT(scope_type, scope_id)
+                DO UPDATE SET
+                  scope_name = excluded.scope_name,
+                  budget_usd = excluded.budget_usd,
+                  warning_percent = excluded.warning_percent,
+                  is_active = TRUE,
+                  quota_mode = COALESCE(quotas.quota_mode, 'shared_evenly')
+            """),
+            {
+                "budget_usd": budget,
+                "warning_percent": warning,
+            },
+        )
+        Session.commit()
+
+    except Exception:
+        Session.rollback()
+        raise
 def _get_notify_level(percent_used: Optional[float]) -> Optional[int]:
     if percent_used is None:
         return None
@@ -288,11 +334,14 @@ def _safe_round(value: Optional[float], digits: int) -> Optional[float]:
     response_model=QuotaSummary,
     summary="Get company quota summary",
 )
+
 async def get_quotas_summary(
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
     user=Depends(get_verified_user),
 ) -> QuotaSummary:
+    
+    _ensure_company_quota_from_env()
     try:
         quota_query = text("""
             SELECT
@@ -361,6 +410,7 @@ async def get_quotas_monitoring(
     group_ids: Optional[List[str]] = Query(default=None),
     user=Depends(get_verified_user),
 ) -> List[QuotaMonitoringItem]:
+    _ensure_company_quota_from_env()
     try:
         items: List[QuotaMonitoringItem] = []
         safe_group_ids = [g.strip() for g in (group_ids or []) if g and g.strip()]
@@ -402,7 +452,7 @@ async def get_quotas_monitoring(
             else 80.0
         )
         company_active = bool(company_quota.get("is_active")) if company_quota else True
-        company_quota_mode = company_quota.get("quota_mode") if company_quota else None
+        company_quota_mode = company_quota.get("quota_mode") if company_quota else "shared_evenly"
 
         company_remaining = None if company_budget is None else company_budget - company_spent
         company_percent = (
@@ -411,23 +461,23 @@ async def get_quotas_monitoring(
             else (company_spent / company_budget * 100.0 if company_budget > 0 else 0.0)
         )
 
-        items.append(
-            QuotaMonitoringItem(
-                scopeType="company",
-                scopeId="company",
-                scopeName=(company_quota.get("scope_name") if company_quota else "Вся компания"),
-                budgetUsd=_safe_round(company_budget, 2),
-                spentUsd=round(company_spent, 6),
-                remainingUsd=_safe_round(company_remaining, 6),
-                spentPercent=_safe_round(company_percent, 2),
-                warningPercent=company_warning,
-                isActive=company_active,
-                quotaMode=company_quota_mode,
-                usersCount=None,
-                perUserBudgetUsd=None,
-                status=_calc_status(company_budget, company_percent, company_warning, company_active),
-            )
-        )
+        # items.append(
+        #     QuotaMonitoringItem(
+        #         scopeType="company",
+        #         scopeId="company",
+        #         scopeName=(company_quota.get("scope_name") if company_quota else "Вся компания"),
+        #         budgetUsd=_safe_round(company_budget, 2),
+        #         spentUsd=round(company_spent, 6),
+        #         remainingUsd=_safe_round(company_remaining, 6),
+        #         spentPercent=_safe_round(company_percent, 2),
+        #         warningPercent=company_warning,
+        #         isActive=company_active,
+        #         quotaMode=company_quota_mode,
+        #         usersCount=None,
+        #         perUserBudgetUsd=None,
+        #         status=_calc_status(company_budget, company_percent, company_warning, company_active),
+        #     )
+        # )
 
         # --- groups + quotas ---
         group_params = {}
