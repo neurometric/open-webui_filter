@@ -498,12 +498,13 @@
 											</Tooltip>
 										</div>
 									</div>
-									<div class="flex w-full gap-2">
+									<!-- <div class="flex w-full gap-2">
 										<div class="w-full">
 											<div class=" self-center text-xs font-medium min-w-fit mb-1">
 												{$i18n.t('Application DN')}
 											</div>
 											<Tooltip
+												disabled={true}
 												content={$i18n.t('The Application Account DN you bind with for search')}
 												placement="top-start"
 											>
@@ -520,11 +521,12 @@
 												{$i18n.t('Application DN Password')}
 											</div>
 											<SensitiveInput
+												disabled={true}
 												placeholder={$i18n.t('Enter Application DN Password')}
 												bind:value={LDAP_SERVER.app_dn_password}
 											/>
 										</div>
-									</div>
+									</div> -->
 									<div class="flex w-full gap-2">
 										<div class="w-full">
 											<div class=" self-center text-xs font-medium min-w-fit mb-1">
