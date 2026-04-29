@@ -99,6 +99,7 @@
 
 						<div class="flex flex-col gap-1.5">
 							{#each config?.OPENAI_API_BASE_URLS ?? [] as url, idx}
+							 {#if !url?.toLowerCase().includes('openrouter.ai')}
 								<Connection
 									bind:url
 									bind:key={config.OPENAI_API_KEYS[idx]}
@@ -122,6 +123,7 @@
 										config.OPENAI_API_CONFIGS = newConfig;
 									}}
 								/>
+								{/if}
 							{/each}
 						</div>
 					</div>
