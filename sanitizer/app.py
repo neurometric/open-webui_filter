@@ -51,7 +51,7 @@ def _env_bool(name: str, default: str = "0") -> bool:
 
 
 NER_ENABLED = _env_bool("NER_ENABLED", "1")
-NER_URL = os.getenv("NER_URL", "http://172.31.4.20:8002/ner").strip()
+NER_URL = os.getenv("NER_URL", "").strip()
 NER_TIMEOUT_MS = int(os.getenv("NER_TIMEOUT_MS", "2000"))
 NER_MIN_SCORE = float(os.getenv("NER_MIN_SCORE", "0.65"))
 NER_LABELS = {
