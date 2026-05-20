@@ -356,11 +356,22 @@ export const addUser = async (
 	token: string,
 	name: string,
 	email: string,
-	password: string,
+	password: string | null = null,
 	role: string = 'pending',
 	profile_image_url: null | string = null
 ) => {
 	let error = null;
+
+	const payload: Record<string, any> = {
+		name,
+		email,
+		role,
+		...(profile_image_url && { profile_image_url })
+	};
+
+	if (password !== null && password !== undefined && password !== '') {
+		payload.password = password;
+	}
 
 	const res = await fetch(`${WEBUI_API_BASE_URL}/auths/add`, {
 		method: 'POST',
@@ -368,13 +379,7 @@ export const addUser = async (
 			'Content-Type': 'application/json',
 			...(token && { authorization: `Bearer ${token}` })
 		},
-		body: JSON.stringify({
-			name: name,
-			email: email,
-			password: password,
-			role: role,
-			...(profile_image_url && { profile_image_url: profile_image_url })
-		})
+		body: JSON.stringify(payload)
 	})
 		.then(async (res) => {
 			if (!res.ok) throw await res.json();
