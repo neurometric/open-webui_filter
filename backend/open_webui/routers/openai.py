@@ -847,6 +847,7 @@ async def generate_chat_completion(
     if BYPASS_MODEL_ACCESS_CONTROL:
         bypass_filter = True
 
+    
     idx = 0
 
     payload = {**form_data}
@@ -981,6 +982,28 @@ async def generate_chat_completion(
         session = aiohttp.ClientSession(
             trust_env=True, timeout=aiohttp.ClientTimeout(total=AIOHTTP_CLIENT_TIMEOUT)
         )
+        log.info(
+            "LLM REQUEST DEBUG:\n"
+            "request_url=%s\n"
+            "model_id=%s\n"
+            "conversation_id=%s\n"
+            "user_id=%s\n"
+            "user_email=%s\n"
+            "headers=%s\n"
+            "payload=%s",
+            request_url,
+            model_id,
+            conversation_id,
+            user.id if user else None,
+            user.email if user else None,
+            {
+                k: ("***" if "authorization" in k.lower() else v)
+                for k, v in headers.items()
+            },
+            payload,
+        )
+        log.info("OPENROUTER KEY DEBUG: key_prefix=%s key_len=%s", key, len(key))
+        log.info("OPENROUTER IDX DEBUG: idx=%s url=%s model=%s", idx, url, model_id)
 
         r = await session.request(
             method="POST",
@@ -990,6 +1013,17 @@ async def generate_chat_completion(
             cookies=cookies,
             ssl=AIOHTTP_CLIENT_SESSION_SSL,
         )
+        
+        log.info(
+            "LLM RESPONSE DEBUG:\n"
+            "status=%s\n"
+            "content_type=%s\n"
+            "headers=%s",
+            r.status,
+            r.headers.get("Content-Type"),
+            dict(r.headers),
+        )
+        
         audit_inserted = False
         # Check if response is SSE
         if "text/event-stream" in r.headers.get("Content-Type", ""):
@@ -1001,6 +1035,13 @@ async def generate_chat_completion(
             response_meta_id = None
             try:
                 if sanitize_res and sanitize_res.is_user_input:
+                    log.info(
+                        "AUDIT INSERT DEBUG: user_id=%s conversation_id=%s model=%s req_id=%s",
+                        user.id if user else None,
+                        conversation_id,
+                        model_id,
+                        req_id,
+                    )
                     response_meta_id = insert_audit_rows(
                         response_meta=LLMResponseMeta(
                             user_id=user.id if user else None,
