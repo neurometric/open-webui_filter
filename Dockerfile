@@ -35,6 +35,8 @@ WORKDIR /app
 RUN apk add --no-cache git
 
 COPY package.json package-lock.json ./
+ENV ONNXRUNTIME_NODE_INSTALL=skip
+
 RUN npm install --force
 
 COPY . .

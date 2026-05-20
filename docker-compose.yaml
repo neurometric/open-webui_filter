@@ -20,10 +20,11 @@ services:
       - sanitizer
       - nlp-service
     ports:
-      - "${PORT}:${PORT}"
+      - "2026:2026"
     volumes:
       - open-webui:/app/backend/data
     env_file:
+      - ldap.env
       - params.env
     environment:
       SANITIZER_URL: http://sanitizer:8080/v1/sanitize
